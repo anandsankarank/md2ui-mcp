@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="gradBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="gradCard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#1e293b" stop-opacity="0.9"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Outer container with 10% margin -->
+  <g transform="translate(25, 25)">
+    <!-- Base App Window Card -->
+    <rect x="0" y="0" width="206" height="206" rx="36" fill="url(#gradCard)" stroke="url(#gradBg)" stroke-width="4" filter="url(#shadow)"/>
+    
+    <!-- Window Header Dots -->
+    <circle cx="28" cy="28" r="5" fill="#ef4444" opacity="0.8"/>
+    <circle cx="44" cy="28" r="5" fill="#f59e0b" opacity="0.8"/>
+    <circle cx="60" cy="28" r="5" fill="#10b981" opacity="0.8"/>
+
+    <!-- Markdown 'M' Symbol -->
+    <path d="M 38 140 L 38 75 L 56 105 L 74 75 L 74 140" fill="none" stroke="#f8fafc" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- UI Interactive Window / Chart Accent -->
+    <rect x="94" y="65" width="84" height="42" rx="10" fill="#6366f1" fill-opacity="0.25" stroke="#38bdf8" stroke-width="3"/>
+    
+    <!-- Segmented Control Bar -->
+    <rect x="102" y="73" width="28" height="26" rx="6" fill="#38bdf8"/>
+    <rect x="136" y="73" width="34" height="26" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-opacity="0.4"/>
+
+    <!-- Mini Bar Chart Metrics -->
+    <rect x="94" y="120" width="16" height="28" rx="4" fill="#3b82f6"/>
+    <rect x="116" y="112" width="16" height="36" rx="4" fill="#6366f1"/>
+    <rect x="138" y="104" width="16" height="44" rx="4" fill="#06b6d4"/>
+    <rect x="160" y="116" width="16" height="32" rx="4" fill="#10b981"/>
+
+    <!-- Downward Markdown Arrow -->
+    <path d="M 56 150 L 56 175 M 46 166 L 56 175 L 66 166" fill="none" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
+

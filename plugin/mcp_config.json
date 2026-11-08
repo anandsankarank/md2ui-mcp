@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "amdui": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@a-mdui/mcp-server"
+      ]
+    }
+  }
+}
+

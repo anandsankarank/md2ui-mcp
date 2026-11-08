@@ -10,8 +10,13 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:sse": "node dist/index.js --sse",
     "dev": "tsx src/index.ts"
   },
+  "files": [
+    "dist",
+    "plugin"
+  ],
   "keywords": [
     "mcp",
     "model-context-protocol",

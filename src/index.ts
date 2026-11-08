@@ -2,6 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -10,6 +11,7 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -19,28 +21,57 @@ import { TEMPLATES } from './templates.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Locate a-mdui.bundle.js and a-mdui.bundle.css
-function resolveBundleFiles(): { js: string; css: string } {
-  const possibleRoots = [
-    path.resolve(__dirname, '../../dist'),
-    path.resolve(__dirname, '../../../dist'),
-    path.resolve(process.cwd(), 'dist'),
-  ];
+export interface BundleSource {
+  mode: 'inline' | 'cdn';
+  js?: string;
+  css?: string;
+  jsUrl?: string;
+  cssUrl?: string;
+}
 
-  let js = '';
-  let css = '';
+// Locate a-mdui.bundle.js and a-mdui.bundle.css locally, or fallback to public CDN
+function resolveBundle(): BundleSource {
+  const forceCdn = process.env.AMDUI_FORCE_CDN === 'true';
+  const cdnVersion = process.env.AMDUI_CDN_VERSION || 'latest';
+  const cdnJsUrl =
+    process.env.AMDUI_CDN_JS_URL ||
+    `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.js`;
+  const cdnCssUrl =
+    process.env.AMDUI_CDN_CSS_URL ||
+    `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.css`;
 
-  for (const root of possibleRoots) {
-    const jsPath = path.join(root, 'a-mdui.bundle.js');
-    const cssPath = path.join(root, 'a-mdui.bundle.css');
-    if (fs.existsSync(jsPath) && fs.existsSync(cssPath)) {
-      js = fs.readFileSync(jsPath, 'utf-8');
-      css = fs.readFileSync(cssPath, 'utf-8');
-      break;
+  if (!forceCdn) {
+    const possibleRoots = [
+      path.resolve(__dirname, '../../dist'),
+      path.resolve(__dirname, '../../../dist'),
+      path.resolve(__dirname, '../dist/assets'),
+      path.resolve(__dirname, './assets'),
+      path.resolve(process.cwd(), 'dist'),
+    ];
+
+    for (const root of possibleRoots) {
+      const jsPath = path.join(root, 'a-mdui.bundle.js');
+      const cssPath = path.join(root, 'a-mdui.bundle.css');
+      if (fs.existsSync(jsPath) && fs.existsSync(cssPath)) {
+        try {
+          const js = fs.readFileSync(jsPath, 'utf-8');
+          const css = fs.readFileSync(cssPath, 'utf-8');
+          if (js.length > 0 && css.length > 0) {
+            return { mode: 'inline', js, css };
+          }
+        } catch {
+          // Fall through to CDN if reading fails
+        }
+      }
     }
   }
 
-  return { js, css };
+  // Decoupled Public CDN mode: Updates to @a-mdui/web on npm automatically load without re-releasing MCP server
+  return {
+    mode: 'cdn',
+    jsUrl: cdnJsUrl,
+    cssUrl: cdnCssUrl,
+  };
 }
 
 const server = new Server(
@@ -201,9 +232,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const safeFilename = `mdui_widget_${Date.now()}.html`;
     const artifactPath = path.join(outDir, safeFilename);
 
-    const { js, css } = resolveBundleFiles();
+    const bundle = resolveBundle();
 
-    // Generate standalone self-contained HTML widget
+    // Generate standalone HTML widget (hybrid: inlined locally or dynamic via CDN)
+    const bundleHead =
+      bundle.mode === 'inline'
+        ? `  <style>\n    /* Inlined A-MDUI bundle styling */\n    ${bundle.css}\n  </style>`
+        : `  <link rel="stylesheet" href="${bundle.cssUrl}">\n  <script src="${bundle.jsUrl}"></script>`;
+
+    const bundleScript =
+      bundle.mode === 'inline'
+        ? `    // Inline A-MDUI Web Component Bundle\n    ${bundle.js}`
+        : `    // Loaded dynamically via decoupled public CDN (${bundle.jsUrl})`;
+
     const htmlContent = `<!DOCTYPE html>
 <html lang="en" class="${theme}">
 <head>
@@ -211,10 +252,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+${bundleHead}
   <style>
-    /* Inlined A-MDUI bundle styling */
-    ${css}
-
     /* Antigravity Generative UI Card Container */
     body {
       background: transparent;
@@ -264,15 +303,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       <div class="widget-title">
         <span>✦</span> ${escapeHtml(title)}
       </div>
-      <span class="widget-badge">A-MDUI v2.0</span>
+      <span class="widget-badge">A-MDUI (${bundle.mode})</span>
     </div>
 
     <a-mdui theme="${theme}" id="app-view"></a-mdui>
   </div>
 
   <script>
-    // Inline A-MDUI Web Component Bundle
-    ${js}
+${bundleScript}
 
     // Set document content
     window.addEventListener('DOMContentLoaded', () => {
@@ -299,7 +337,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 <agent-embed src="file://${artifactPath}"></agent-embed>
 
 * **Artifact File**: [${safeFilename}](file://${artifactPath})
-* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${theme}\`
+* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${theme}\` · Bundle: \`${bundle.mode}\`
 * **Interaction**: Buttons, inputs, and chart tabs are live and responsive in the embedded widget above.`,
         },
       ],
@@ -370,9 +408,96 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const activeSseTransports = new Map<string, SSEServerTransport>();
+
+async function startSseServer(port: number): Promise<void> {
+  const httpServer = http.createServer(async (req, res) => {
+    // Enable CORS for web and client tool integrations
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const host = req.headers.host || `localhost:${port}`;
+    const parsedUrl = new URL(req.url || '/', `http://${host}`);
+    const pathname = parsedUrl.pathname;
+
+    // 1. Initial SSE Connection endpoint
+    if (pathname === '/sse' && req.method === 'GET') {
+      const transport = new SSEServerTransport('/message', res);
+      activeSseTransports.set(transport.sessionId, transport);
+
+      transport.onclose = () => {
+        activeSseTransports.delete(transport.sessionId);
+      };
+
+      await server.connect(transport);
+      return;
+    }
+
+    // 2. Incoming JSON-RPC Message endpoint
+    if (pathname === '/message' && req.method === 'POST') {
+      const sessionId = parsedUrl.searchParams.get('sessionId');
+      if (!sessionId || !activeSseTransports.has(sessionId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing or unknown sessionId' }));
+        return;
+      }
+      const transport = activeSseTransports.get(sessionId)!;
+      await transport.handlePostMessage(req, res);
+      return;
+    }
+
+    // 3. Health & Discovery check
+    if (pathname === '/' || pathname === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          service: 'amdui-mcp-server',
+          version: '1.0.0',
+          mode: 'sse',
+          activeSessions: activeSseTransports.size,
+        })
+      );
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
+  });
+
+  return new Promise((resolve, reject) => {
+    httpServer.listen(port, () => {
+      console.error(`[amdui-mcp-server] SSE Server running on http://localhost:${port}`);
+      console.error(`[amdui-mcp-server] SSE Endpoint: http://localhost:${port}/sse`);
+      console.error(`[amdui-mcp-server] Message Endpoint: http://localhost:${port}/message`);
+      resolve();
+    });
+    httpServer.on('error', reject);
+  });
+}
+
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const args = process.argv.slice(2);
+  const isSse = args.includes('--sse') || process.env.MCP_TRANSPORT === 'sse';
+  const portArgIndex = args.indexOf('--port');
+  const port =
+    portArgIndex !== -1
+      ? parseInt(args[portArgIndex + 1], 10)
+      : parseInt(process.env.PORT || '3000', 10);
+
+  if (isSse) {
+    await startSseServer(port);
+  } else {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 }
 
 main().catch((err) => {

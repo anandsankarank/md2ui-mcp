@@ -1,0 +1,19 @@
+{
+  "name": "amdui",
+  "displayName": "A-MarkdownUI (MDUI)",
+  "version": "1.0.0",
+  "description": "Interactive Generative UI widgets, dashboards, forms, and charts rendered directly in Antigravity chat and side-pane artifacts using Markdown.",
+  "author": "AMarkdownUI Team",
+  "homepage": "https://github.com/anand/MD2UI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anand/MD2UI"
+  },
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Build an interactive SLA & telemetry dashboard",
+    "Show an election results tracker with chamber filters",
+    "Create a flight ticket booking card with seat selection"
+  ]
+}
+
