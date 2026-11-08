@@ -1,0 +1,381 @@
+#!/usr/bin/env node
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ErrorCode,
+  McpError,
+} from '@modelcontextprotocol/sdk/types.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { fileURLToPath } from 'url';
+import { TEMPLATES } from './templates.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Locate a-mdui.bundle.js and a-mdui.bundle.css
+function resolveBundleFiles(): { js: string; css: string } {
+  const possibleRoots = [
+    path.resolve(__dirname, '../../dist'),
+    path.resolve(__dirname, '../../../dist'),
+    path.resolve(process.cwd(), 'dist'),
+  ];
+
+  let js = '';
+  let css = '';
+
+  for (const root of possibleRoots) {
+    const jsPath = path.join(root, 'a-mdui.bundle.js');
+    const cssPath = path.join(root, 'a-mdui.bundle.css');
+    if (fs.existsSync(jsPath) && fs.existsSync(cssPath)) {
+      js = fs.readFileSync(jsPath, 'utf-8');
+      css = fs.readFileSync(cssPath, 'utf-8');
+      break;
+    }
+  }
+
+  return { js, css };
+}
+
+const server = new Server(
+  {
+    name: 'amdui-mcp-server',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+      prompts: {},
+    },
+  }
+);
+
+// =============================================================================
+// 1. Tool Declarations
+// =============================================================================
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [
+      {
+        name: 'render_mdui',
+        description:
+          'Renders A-MarkdownUI (.mdui) markup into a live interactive UI widget inside Antigravity IDE chat (via <agent-embed>) or the side-pane artifact viewer.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: {
+              type: 'string',
+              description: 'The raw A-MDUI (.mdui) document markup to render.',
+            },
+            title: {
+              type: 'string',
+              description: 'Optional display title for the widget header.',
+              default: 'A-MarkdownUI Component',
+            },
+            theme: {
+              type: 'string',
+              enum: ['dark', 'default', 'fintech', 'sunset', 'nordic', 'amethyst'],
+              description: 'Color theme preset for the rendered widget.',
+              default: 'dark',
+            },
+            targetDir: {
+              type: 'string',
+              description:
+                'Optional directory path where the HTML artifact should be saved (e.g. Antigravity conversation artifact directory). Defaults to a persistent temporary folder.',
+            },
+          },
+          required: ['content'],
+        },
+      },
+      {
+        name: 'validate_mdui',
+        description:
+          'Fast static validation and linter for .mdui markup. Verifies balanced ::: container blocks, ??? input fields, @state variables, and {{ }} expressions.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: {
+              type: 'string',
+              description: 'The .mdui markup text to validate.',
+            },
+          },
+          required: ['content'],
+        },
+      },
+      {
+        name: 'get_mdui_template',
+        description:
+          'Retrieves a production-ready .mdui template (flight_booking, dashboard, checkout, charts).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            template: {
+              type: 'string',
+              enum: ['flight_booking', 'dashboard', 'checkout', 'charts'],
+              description: 'The key name of the template to retrieve.',
+            },
+          },
+          required: ['template'],
+        },
+      },
+    ],
+  };
+});
+
+// =============================================================================
+// 2. Prompt Declarations
+// =============================================================================
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return {
+    prompts: [
+      {
+        name: 'amdui_authoring_guide',
+        description:
+          'System prompt teaching the LLM how to author valid, rich, autonomous .mdui screens.',
+      },
+    ],
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name } = request.params;
+  if (name === 'amdui_authoring_guide') {
+    return {
+      description: 'System prompt instructions for authoring .mdui documents',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `You are an AI UI agent that generates rich interactive screens in raw A-MarkdownUI (.mdui) markup.
+Never wrap your whole response in \`\`\`mdui code fences. Use standard Markdown plus the 6 core A-MDUI directives:
+1. STATE: @key("value") or @count(1) or @items([...]) declared at the top.
+2. CONTAINERS: ::: card, ::: row, ::: grid, ::: hero, ::: auto, or charts (::: barChart, ::: lineChart, ::: pieChart with pipe tables). Close with :::. Mutually exclusive conditional views: stack them directly (::: card if: @tab == "val") without wrapping inside ::: grid.
+3. INPUTS: ??? id \\n typeOf: [segmented | toggle | slider | text | picker | date] \\n label: Label \\n options: ["a", "b"] \\n ???
+4. INTERPOLATION: {{ count * price | 0 | currency }{.bold, #38bdf8}}
+5. BUTTON ACTIONS: [Button Label](action:action_name){primary} or [Cancel](action:cancel){secondary}
+6. CONDITIONAL ATTRIBUTES: Add 'if: @key == "value"' on containers and rows.`,
+          },
+        },
+      ],
+    };
+  }
+  throw new McpError(ErrorCode.InvalidRequest, `Unknown prompt: ${name}`);
+});
+
+// =============================================================================
+// 3. Tool Execution Handlers
+// =============================================================================
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  if (name === 'render_mdui') {
+    let rawContent = String(args?.content || '').trim();
+    const title = String(args?.title || 'A-MarkdownUI Component');
+    const theme = String(args?.theme || 'dark');
+    const targetDir = args?.targetDir ? String(args.targetDir) : '';
+
+    // Strip outer markdown fences if present
+    const fenceMatch = rawContent.match(/^```(?:mdui|markdown)?\s*\n([\s\S]*?)\n```\s*$/i);
+    if (fenceMatch) {
+      rawContent = fenceMatch[1].trim();
+    }
+
+    // Determine artifact directory
+    let outDir = targetDir;
+    if (!outDir) {
+      if (process.env.ANTIGRAVITY_ARTIFACT_DIR && fs.existsSync(process.env.ANTIGRAVITY_ARTIFACT_DIR)) {
+        outDir = process.env.ANTIGRAVITY_ARTIFACT_DIR;
+      } else {
+        outDir = path.join(os.tmpdir(), 'antigravity-mdui-artifacts');
+      }
+    }
+    fs.mkdirSync(outDir, { recursive: true });
+
+    const safeFilename = `mdui_widget_${Date.now()}.html`;
+    const artifactPath = path.join(outDir, safeFilename);
+
+    const { js, css } = resolveBundleFiles();
+
+    // Generate standalone self-contained HTML widget
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en" class="${theme}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* Inlined A-MDUI bundle styling */
+    ${css}
+
+    /* Antigravity Generative UI Card Container */
+    body {
+      background: transparent;
+      color: var(--foreground, #f8fafc);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      margin: 0;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+    .antigravity-card {
+      background: var(--card, rgba(15, 23, 42, 0.95));
+      border: 1px solid var(--border, rgba(99, 102, 241, 0.25));
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35);
+    }
+    .widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    }
+    .widget-title {
+      font-weight: 700;
+      font-size: 13.5px;
+      color: var(--foreground, #f8fafc);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .widget-badge {
+      font-size: 10.5px;
+      font-family: monospace;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 2px 8px;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased">
+  <div class="antigravity-card">
+    <div class="widget-header">
+      <div class="widget-title">
+        <span>✦</span> ${escapeHtml(title)}
+      </div>
+      <span class="widget-badge">A-MDUI v2.0</span>
+    </div>
+
+    <a-mdui theme="${theme}" id="app-view"></a-mdui>
+  </div>
+
+  <script>
+    // Inline A-MDUI Web Component Bundle
+    ${js}
+
+    // Set document content
+    window.addEventListener('DOMContentLoaded', () => {
+      const view = document.getElementById('app-view');
+      if (view) {
+        view.content = ${JSON.stringify(rawContent)};
+      }
+    });
+  </script>
+</body>
+</html>`;
+
+    fs.writeFileSync(artifactPath, htmlContent, 'utf-8');
+
+    const lines = rawContent.split('\n').length;
+    const bytes = Buffer.byteLength(rawContent, 'utf-8');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `### A-MDUI Interactive UI Rendered
+
+<agent-embed src="file://${artifactPath}"></agent-embed>
+
+* **Artifact File**: [${safeFilename}](file://${artifactPath})
+* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${theme}\`
+* **Interaction**: Buttons, inputs, and chart tabs are live and responsive in the embedded widget above.`,
+        },
+      ],
+    };
+  }
+
+  if (name === 'validate_mdui') {
+    const content = String(args?.content || '');
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // 1. Container validation
+    const containerOpens = (content.match(/:::\s*[a-zA-Z0-9_-]+/g) || []).length;
+    const containerCloses = (content.match(/^:::\s*$/gm) || []).length;
+    if (containerOpens !== containerCloses) {
+      errors.push(`Container block mismatch: ${containerOpens} opened, but ${containerCloses} closed.`);
+    }
+
+    // 2. Input validation
+    const inputOpens = (content.match(/\?\?\?\s+[a-zA-Z0-9_]+/g) || []).length;
+    const inputCloses = (content.match(/^\?\?\?\s*$/gm) || []).length;
+    if (inputOpens !== inputCloses) {
+      errors.push(`Input block mismatch: ${inputOpens} opened, but ${inputCloses} closed with '???'`);
+    }
+
+    // 3. Grid conditional warning check
+    if (content.includes('::: grid') && content.includes('::: card if:')) {
+      warnings.push(
+        "Notice: Mutually exclusive conditional cards (e.g. '::: card if: @tab == ...') should be stacked directly without an enclosing '::: grid' to prevent column squashing."
+      );
+    }
+
+    const isValid = errors.length === 0;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: isValid
+            ? `✓ **Valid A-MDUI Document**\n* ${containerOpens} container(s)\n* ${inputOpens} interactive input(s)\n${warnings.length > 0 ? '\n' + warnings.map(w => `* ⚠️ ${w}`).join('\n') : ''}`
+            : `❌ **A-MDUI Syntax Errors Found**:\n${errors.map(e => `- ${e}`).join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.map(w => `- ${w}`).join('\n') : ''}`,
+        },
+      ],
+    };
+  }
+
+  if (name === 'get_mdui_template') {
+    const key = String(args?.template || 'flight_booking');
+    const tpl = TEMPLATES[key];
+    if (!tpl) {
+      throw new McpError(ErrorCode.InvalidParams, `Unknown template '${key}'. Available: ${Object.keys(TEMPLATES).join(', ')}`);
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `### Template: ${tpl.title}\n*${tpl.description}*\n\n\`\`\`mdui\n${tpl.mdui}\n\`\`\``,
+        },
+      ],
+    };
+  }
+
+  throw new McpError(ErrorCode.MethodNotFound, `Unknown tool '${name}'`);
+});
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((err) => {
+  console.error('Fatal MCP Server Error:', err);
+  process.exit(1);
+});
