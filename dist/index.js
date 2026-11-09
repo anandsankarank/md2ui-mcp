@@ -284,6 +284,26 @@ ${bundleScript}
       const view = document.getElementById('app-view');
       if (view && !view.content) {
         view.content = ${JSON.stringify(rawContent)};
+
+        // PostMessage bridge: Forward user actions & form submissions to the host / LLM
+        view.addEventListener('submit', (e) => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              type: 'a-mdui:submit',
+              source: 'a-mdui',
+              detail: e.detail
+            }, '*');
+          }
+        });
+        view.addEventListener('action', (e) => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              type: 'a-mdui:action',
+              source: 'a-mdui',
+              detail: e.detail
+            }, '*');
+          }
+        });
       }
     }
     if (document.readyState === 'loading') {

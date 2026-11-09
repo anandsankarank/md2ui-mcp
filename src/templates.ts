@@ -309,10 +309,7 @@ Your consultation has been reserved in the clinic calendar.
 * **Format**: {{ visitType }}
 * **Confirmation Code**: \`HC-8942-TX\`
 
-::: row
-[Add to Calendar](action:add_calendar){primary}
-[Modify Appointment](action:set:step="intake"){secondary}
-:::
+[📅 Add to Google Calendar](https://calendar.google.com/calendar/render?action=TEMPLATE&text=Doctor+Appointment+-+Dr.+Sarah+Jenkins&details=Appointment+for+{{ patientName }}+with+{{ provider }}&location=Austin+Regional+Medical+Center,+Suite+420){primary, target: _blank} = [Modify Appointment](action:set:step="intake"){secondary}
 :::`
   }
 };
