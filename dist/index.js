@@ -51,6 +51,143 @@ function resolveBundle() {
         cssUrl: cdnCssUrl,
     };
 }
+const submissions = [];
+let latestSubmission = null;
+let callbackServerPort = 3928;
+function startHttpCallbackServer(preferredPort = 3928) {
+    return new Promise((resolve) => {
+        const callbackServer = http.createServer((req, res) => {
+            // CORS headers allowing requests from sandboxed iframes / webviews
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            if (req.method === 'OPTIONS') {
+                res.writeHead(204);
+                res.end();
+                return;
+            }
+            const host = req.headers.host || `localhost:${preferredPort}`;
+            const url = new URL(req.url || '/', `http://${host}`);
+            const pathname = url.pathname;
+            if (req.method === 'POST' && pathname === '/api/submit') {
+                let body = '';
+                req.on('data', (chunk) => {
+                    body += chunk;
+                });
+                req.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(body || '{}');
+                        const submission = {
+                            id: parsed.id || `sub_${Date.now()}`,
+                            formId: parsed.formId || 'form',
+                            values: parsed.values || {},
+                            timestamp: parsed.timestamp || new Date().toISOString(),
+                        };
+                        submissions.unshift(submission);
+                        latestSubmission = submission;
+                        // Persist to tmp file for inter-process access
+                        try {
+                            const tmpFile = path.join(os.tmpdir(), 'amdui-latest-submission.json');
+                            fs.writeFileSync(tmpFile, JSON.stringify(submission, null, 2), 'utf-8');
+                        }
+                        catch { }
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: true,
+                            message: 'Form submission received',
+                            submissionId: submission.id,
+                        }));
+                    }
+                    catch (err) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                    }
+                });
+                return;
+            }
+            if (req.method === 'POST' && pathname === '/api/action') {
+                let body = '';
+                req.on('data', (chunk) => {
+                    body += chunk;
+                });
+                req.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(body || '{}');
+                        console.error(`[amdui-mcp-server] Received action event: ${JSON.stringify(parsed)}`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true, received: true }));
+                    }
+                    catch (err) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                    }
+                });
+                return;
+            }
+            if (req.method === 'GET' && (pathname === '/api/submissions' || pathname === '/api/submissions/latest')) {
+                const formIdFilter = url.searchParams.get('formId');
+                let result = latestSubmission;
+                if (formIdFilter) {
+                    result = submissions.find((s) => s.formId === formIdFilter) || null;
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    submission: result,
+                    count: submissions.length,
+                }));
+                return;
+            }
+            if (req.method === 'DELETE' && pathname === '/api/submissions') {
+                submissions.length = 0;
+                latestSubmission = null;
+                try {
+                    const tmpFile = path.join(os.tmpdir(), 'amdui-latest-submission.json');
+                    if (fs.existsSync(tmpFile))
+                        fs.unlinkSync(tmpFile);
+                }
+                catch { }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Submissions cleared' }));
+                return;
+            }
+            if (pathname === '/health' || pathname === '/api/health') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    status: 'ok',
+                    service: 'amdui-submission-bridge',
+                    port: callbackServerPort,
+                    submissionsCount: submissions.length,
+                }));
+                return;
+            }
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Endpoint not found' }));
+        });
+        const tryListen = (portToTry) => {
+            callbackServer.listen(portToTry, () => {
+                callbackServerPort = portToTry;
+                console.error(`[amdui-mcp-server] Submission webhook listening on http://localhost:${portToTry}`);
+                try {
+                    fs.writeFileSync(path.join(os.tmpdir(), 'amdui-callback-port.json'), JSON.stringify({ port: portToTry, updatedAt: new Date().toISOString() }), 'utf-8');
+                }
+                catch { }
+                resolve(portToTry);
+            });
+            callbackServer.on('error', (err) => {
+                if (err.code === 'EADDRINUSE') {
+                    console.error(`[amdui-mcp-server] Port ${portToTry} in use, trying ${portToTry + 1}...`);
+                    tryListen(portToTry + 1);
+                }
+                else {
+                    console.error(`[amdui-mcp-server] Submission webhook error:`, err);
+                    resolve(portToTry);
+                }
+            });
+        };
+        tryListen(preferredPort);
+    });
+}
 const server = new Server({
     name: 'amdui-mcp-server',
     version: '1.0.0',
@@ -122,6 +259,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         },
                     },
                     required: ['template'],
+                },
+            },
+            {
+                name: 'get_form_submission',
+                description: 'Retrieves the latest user form data submitted from an interactive A-MDUI widget via the HTTP callback bridge. Call this tool after rendering an A-MDUI form to receive the user\'s choices, selected options, text inputs, or multi-choice values and continue the interaction.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        formId: {
+                            type: 'string',
+                            description: 'Optional formId to filter submissions by. If omitted, returns the most recent submission.',
+                        },
+                        clearAfterRead: {
+                            type: 'boolean',
+                            description: 'If true, clears this submission from memory after reading. Defaults to false.',
+                            default: false,
+                        },
+                    },
                 },
             },
         ],
@@ -279,23 +434,92 @@ ${bundleHead}
   <script>
 ${bundleScript}
 
+    const CALLBACK_PORT = ${callbackServerPort};
+
+    function showToast(message, type = 'success') {
+      let toast = document.getElementById('amdui-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'amdui-toast';
+        toast.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(20px);padding:8px 18px;border-radius:24px;font-size:12px;font-weight:600;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:6px;transition:all 0.3s cubic-bezier(0.16,1,0.3,1);opacity:0;pointer-events:none;';
+        document.body.appendChild(toast);
+      }
+      if (type === 'success') {
+        toast.style.background = '#059669';
+        toast.style.color = '#ffffff';
+        toast.style.border = '1px solid rgba(52, 211, 153, 0.4)';
+      } else {
+        toast.style.background = '#2563eb';
+        toast.style.color = '#ffffff';
+        toast.style.border = '1px solid rgba(96, 165, 250, 0.4)';
+      }
+      toast.textContent = message;
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateX(-50%) translateY(0)';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(20px)';
+      }, 4000);
+    }
+
     // Set document content with resilient immediate + lifecycle listener
     function initMdui() {
       const view = document.getElementById('app-view');
       if (view && !view.content) {
         view.content = ${JSON.stringify(rawContent)};
 
-        // PostMessage bridge: Forward user actions & form submissions to the host / LLM
-        view.addEventListener('submit', (e) => {
+        function dispatchSubmitToBridge(detail) {
+          const payload = {
+            formId: detail.formId || 'form',
+            values: detail.values || view.values || {},
+            timestamp: new Date().toISOString()
+          };
+
+          // 1. PostMessage bridge (if host window is listening)
           if (window.parent && window.parent !== window) {
             window.parent.postMessage({
               type: 'a-mdui:submit',
               source: 'a-mdui',
-              detail: e.detail
+              detail: detail
             }, '*');
           }
+
+          // 2. HTTP callback bridge directly to local MCP server
+          fetch('http://localhost:' + CALLBACK_PORT + '/api/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          .then(res => res.json())
+          .then(data => {
+            console.log('[A-MDUI] Form submitted to AI agent via MCP bridge:', data);
+            showToast('✓ Submitted to AI agent! Processing your request...', 'success');
+          })
+          .catch(err => {
+            console.warn('[A-MDUI] MCP submission bridge unavailable:', err);
+            showToast('✓ Submitted locally', 'info');
+          });
+        }
+
+        view.addEventListener('submit', (e) => {
+          dispatchSubmitToBridge(e.detail || {});
         });
+
         view.addEventListener('action', (e) => {
+          const act = e.detail || {};
+          const trig = act.trigger || {};
+          const isSubmitTrigger = trig.type === 'submit' ||
+            String(trig.payload || '').toLowerCase().includes('submit') ||
+            String(act.id || '').toLowerCase().includes('submit');
+
+          if (isSubmitTrigger) {
+            dispatchSubmitToBridge({
+              formId: trig.payload || act.id || 'form',
+              values: view.values || {},
+              action: act
+            });
+          }
+
           if (window.parent && window.parent !== window) {
             window.parent.postMessage({
               type: 'a-mdui:action',
@@ -327,7 +551,7 @@ ${bundleScript}
 
 * **Artifact File**: [${safeFilename}](file://${artifactPath})
 * **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${theme}\` · Bundle: \`${bundle.mode}\`
-* **Interaction**: Buttons, inputs, and chart tabs are live and responsive in the embedded widget above.`,
+* **Interaction**: Live and responsive. Submissions are dispatched to the MCP bridge at \`http://localhost:${callbackServerPort}/api/submit\` and readable via \`get_form_submission\`.`,
                 },
             ],
         };
@@ -375,6 +599,66 @@ ${bundleScript}
                 {
                     type: 'text',
                     text: `### Template: ${tpl.title}\n*${tpl.description}*\n\n\`\`\`mdui\n${tpl.mdui}\n\`\`\``,
+                },
+            ],
+        };
+    }
+    if (name === 'get_form_submission') {
+        const formIdFilter = args?.formId ? String(args.formId) : null;
+        const clearAfterRead = Boolean(args?.clearAfterRead);
+        let submission = null;
+        if (formIdFilter) {
+            submission = submissions.find((s) => s.formId === formIdFilter) || null;
+        }
+        else {
+            submission = latestSubmission;
+        }
+        // Fallback: check tmp file in case of fresh process invocation
+        if (!submission) {
+            try {
+                const tmpFile = path.join(os.tmpdir(), 'amdui-latest-submission.json');
+                if (fs.existsSync(tmpFile)) {
+                    const parsed = JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
+                    if (!formIdFilter || parsed.formId === formIdFilter) {
+                        submission = parsed;
+                    }
+                }
+            }
+            catch { }
+        }
+        if (!submission) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: 'No form submissions received yet. The user has not submitted the form, or the submission is still pending.',
+                    },
+                ],
+            };
+        }
+        if (clearAfterRead) {
+            if (submission === latestSubmission) {
+                latestSubmission = null;
+            }
+            const idx = submissions.indexOf(submission);
+            if (idx !== -1)
+                submissions.splice(idx, 1);
+            try {
+                const tmpFile = path.join(os.tmpdir(), 'amdui-latest-submission.json');
+                if (fs.existsSync(tmpFile))
+                    fs.unlinkSync(tmpFile);
+            }
+            catch { }
+        }
+        const formattedJson = JSON.stringify(submission.values, null, 2);
+        const fieldSummary = Object.entries(submission.values)
+            .map(([k, v]) => `* **${k}**: \`${JSON.stringify(v)}\``)
+            .join('\n');
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `### User Form Submission Received\n\n* **Form ID**: \`${submission.formId}\`\n* **Submitted At**: ${submission.timestamp}\n\n#### Collected Form Values:\n${fieldSummary}\n\n\`\`\`json\n${formattedJson}\n\`\`\``,
                 },
             ],
         };
@@ -453,6 +737,9 @@ async function main() {
     const port = portArgIndex !== -1
         ? parseInt(args[portArgIndex + 1], 10)
         : parseInt(process.env.PORT || '3000', 10);
+    // Always start the local HTTP callback bridge (on default port 3928 or env AMDUI_CALLBACK_PORT)
+    const preferredCallbackPort = parseInt(process.env.AMDUI_CALLBACK_PORT || '3928', 10);
+    await startHttpCallbackServer(preferredCallbackPort);
     if (isSse) {
         await startSseServer(port);
     }
