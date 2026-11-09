@@ -224,22 +224,25 @@ ${bundleHead}
       color: var(--foreground, #f8fafc);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       margin: 0;
-      padding: 12px;
+      padding: 8px;
       overflow-x: hidden;
+      overflow-y: auto;
+      box-sizing: border-box;
     }
     .antigravity-card {
       background: var(--card, rgba(15, 23, 42, 0.95));
       border: 1px solid var(--border, rgba(99, 102, 241, 0.25));
-      border-radius: 14px;
-      padding: 16px;
+      border-radius: 12px;
+      padding: 12px;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35);
+      box-sizing: border-box;
     }
     .widget-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
-      padding-bottom: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
     }
     .widget-title {

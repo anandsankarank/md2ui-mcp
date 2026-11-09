@@ -241,8 +241,8 @@ Secure provider scheduling and intake assistant.
 :::
 
 ::: card if: @step == "intake"
-### Step 1 of 3: Visit Details & Specialty
-Please select your consultation requirements to view available healthcare providers.
+### Step 1 of 3: Consultation Details
+Please specify your consultation requirements to view matching providers.
 
 ??? specialty
 typeOf: segmented
@@ -258,11 +258,11 @@ label: Consultation Type
 
 ??? patientName
 typeOf: text
-placeholder: Full Legal Name
+placeholder: Enter Patient Full Legal Name
 label: Patient Name
 ???
 
-[Find Available Providers](action:set:step="selection"){primary}
+[Find Available Providers](action:set:step="selection"){primary, disabled: empty(patientName)}
 :::
 
 ::: card if: @step == "selection"
@@ -271,7 +271,8 @@ Select an available doctor and appointment time for **{{ specialty }}** ({{ visi
 
 ??? provider
 typeOf: segmented
-options: ["Dr. Sarah Jenkins, MD", "Dr. Alex Rivera, DO", "Dr. Emily Chen, MD"]
+style: menu
+options: ["Dr. Sarah Jenkins, MD (Family Medicine)", "Dr. Marcus Patel, MD (Internal Medicine)", "Dr. Emily Chen, DO (Preventive Care)"]
 label: Healthcare Provider
 ???
 
@@ -281,10 +282,7 @@ options: ["Tomorrow at 10:00 AM", "Tomorrow at 2:30 PM", "Thursday at 9:00 AM", 
 label: Available Appointment Time
 ???
 
-::: row
-[← Back to Details](action:set:step="intake"){secondary}
-[Confirm Appointment](action:set:step="confirmed"){primary}
-:::
+[← Back to Details](action:set:step="intake"){secondary} = [Confirm Appointment](action:set:step="confirmed"){primary}
 :::
 
 ::: card if: @step == "confirmed"
