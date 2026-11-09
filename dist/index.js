@@ -68,7 +68,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         tools: [
             {
                 name: 'render_mdui',
-                description: 'Renders A-MarkdownUI (.mdui) markup into a live interactive UI widget inside Antigravity IDE chat (via <agent-embed>) or the side-pane artifact viewer.',
+                description: 'Renders A-MarkdownUI (.mdui) markup into a live interactive UI widget inside Antigravity IDE chat (via <agent-embed>) or the side-pane artifact viewer. For transactional tasks (e.g. bookings, appointments, checkout, onboarding, surveys), generate a Progressive Intake Wizard (@step("intake") -> selection -> confirmed) rather than pre-populating fabricated end-state assumptions.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -111,13 +111,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: 'get_mdui_template',
-                description: 'Retrieves a production-ready .mdui template (flight_booking, dashboard, checkout, charts).',
+                description: 'Retrieves a production-ready .mdui template (booking_wizard, flight_booking, dashboard, checkout, charts).',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         template: {
                             type: 'string',
-                            enum: ['flight_booking', 'dashboard', 'checkout', 'charts'],
+                            enum: ['booking_wizard', 'flight_booking', 'dashboard', 'checkout', 'charts'],
                             description: 'The key name of the template to retrieve.',
                         },
                     },
@@ -156,8 +156,16 @@ Never wrap your whole response in \`\`\`mdui code fences. Use standard Markdown 
 2. CONTAINERS: ::: card, ::: row, ::: grid, ::: hero, ::: auto, or charts (::: barChart, ::: lineChart, ::: pieChart with pipe tables). Close with :::. Mutually exclusive conditional views: stack them directly (::: card if: @tab == "val") without wrapping inside ::: grid.
 3. INPUTS: ??? id \\n typeOf: [segmented | toggle | slider | text | picker | date] \\n label: Label \\n options: ["a", "b"] \\n ???
 4. INTERPOLATION: {{ count * price | 0 | currency }{.bold, #38bdf8}}
-5. BUTTON ACTIONS: [Button Label](action:action_name){primary} or [Cancel](action:cancel){secondary}
-6. CONDITIONAL ATTRIBUTES: Add 'if: @key == "value"' on containers and rows.`,
+5. BUTTON ACTIONS: [Button Label](action:action_name){primary} or [Cancel](action:cancel){secondary}. Use action:set:variable="value" to update state or advance steps.
+6. CONDITIONAL ATTRIBUTES: Add 'if: @key == "value"' on containers and rows.
+
+CORE DESIGN PRINCIPLE: PROGRESSIVE INTAKE WIZARD
+- For transactional tasks (booking appointments, flights, reservations, checkouts, onboarding, custom configuration), NEVER fabricate user intent, dates, or providers into a pre-filled mock end-state.
+- Always implement a 3-step reactive wizard:
+  * Step 1 (Intake): Declare @step("intake"). In '::: card if: @step == "intake"', ask criteria/preferences with inputs. CTA: [Next Step](action:set:step="selection"){primary}.
+  * Step 2 (Selection): In '::: card if: @step == "selection"', present available options based on intake. Provide [Back](action:set:step="intake"){secondary} and [Confirm](action:set:step="confirmed"){primary}.
+  * Step 3 (Confirmation): In '::: card if: @step == "confirmed"', render summary, confirmation code, and follow-up actions.
+- Single-screen dashboards should only be used for read-only telemetry, reports, or charts where data already exists.`,
                     },
                 },
             ],

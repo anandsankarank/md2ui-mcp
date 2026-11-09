@@ -227,6 +227,86 @@ label: Promotional Discount
 :::
 
 [Download CSV Reports](action:download_csv){secondary} [Refresh Analytics Feed](action:refresh){primary}`
+  },
+
+  booking_wizard: {
+    title: 'Progressive Intake Booking Wizard',
+    description: 'Three-stage intake wizard (criteria intake -> option selection -> confirmation) without pre-fabricated assumptions.',
+    mdui: `@step("intake")
+@specialty("Primary Care")
+@visitType("In-Person")
+@provider("Dr. Sarah Jenkins, MD")
+@timeSlot("Tomorrow at 10:00 AM")
+@patientName("")
+
+::: hero
+# 🩺 HealthConnect Appointment Scheduling
+Secure provider scheduling and intake assistant.
+:::
+
+::: card if: @step == "intake"
+### Step 1 of 3: Visit Details & Specialty
+Please select your consultation requirements to view available healthcare providers.
+
+??? specialty
+typeOf: segmented
+options: ["Primary Care", "Cardiology", "Dermatology", "Pediatrics"]
+label: Care Specialty
+???
+
+??? visitType
+typeOf: segmented
+options: ["In-Person", "Telehealth Video"]
+label: Consultation Type
+???
+
+??? patientName
+typeOf: text
+placeholder: Full Legal Name
+label: Patient Name
+???
+
+[Find Available Providers](action:set:step="selection"){primary}
+:::
+
+::: card if: @step == "selection"
+### Step 2 of 3: Choose Provider & Time Slot
+Select an available doctor and appointment time for **{{ specialty }}** ({{ visitType }}).
+
+??? provider
+typeOf: segmented
+options: ["Dr. Sarah Jenkins, MD", "Dr. Alex Rivera, DO", "Dr. Emily Chen, MD"]
+label: Healthcare Provider
+???
+
+??? timeSlot
+typeOf: segmented
+options: ["Tomorrow at 10:00 AM", "Tomorrow at 2:30 PM", "Thursday at 9:00 AM", "Friday at 11:15 AM"]
+label: Available Appointment Time
+???
+
+::: row
+[← Back to Details](action:set:step="intake"){secondary}
+[Confirm Appointment](action:set:step="confirmed"){primary}
+:::
+:::
+
+::: card if: @step == "confirmed"
+### 🎉 Appointment Confirmed!
+Your consultation has been reserved in the clinic calendar.
+
+* **Patient**: {{ patientName | "Registered Patient" }}
+* **Specialty**: {{ specialty }}
+* **Provider**: **{{ provider }}**
+* **Time**: **{{ timeSlot }}**
+* **Format**: {{ visitType }}
+* **Confirmation Code**: \`HC-8942-TX\`
+
+::: row
+[Add to Calendar](action:add_calendar){primary}
+[Modify Appointment](action:set:step="intake"){secondary}
+:::
+:::`
   }
 };
 
