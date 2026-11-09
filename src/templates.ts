@@ -262,11 +262,12 @@ label: Consultation Type
 
 ??? patientName
 typeOf: text
-placeholder: Enter Patient Full Legal Name
-label: Patient Name
+required: true
+placeholder: Enter Full Legal Name
+label: Patient Name *(Required)*
 ???
 
-[Find Available Providers](action:set:step="selection"){primary, disabled: empty(patientName)}
+[Find Available Providers](action:submit; action:set:step="selection"){primary}
 :::
 
 ::: card if: @step == "selection"
@@ -280,11 +281,19 @@ options: ["Dr. Sarah Jenkins, MD (Family Medicine)", "Dr. Marcus Patel, MD (Inte
 label: Healthcare Provider
 ???
 
+::: row
+??? appointmentDate
+typeOf: segmented
+options: ["Tomorrow", "Wednesday", "Thursday"]
+label: Date
+???
+
 ??? timeSlot
 typeOf: segmented
-options: ["Tomorrow at 10:00 AM", "Tomorrow at 2:30 PM", "Thursday at 9:00 AM", "Friday at 11:15 AM"]
-label: Available Appointment Time
+options: ["10:00 AM", "2:30 PM", "4:15 PM"]
+label: Time
 ???
+:::
 
 [← Back to Details](action:set:step="intake"){secondary} = [Confirm Appointment](action:set:step="confirmed"){primary}
 :::
