@@ -312,13 +312,18 @@ ${bundleHead}
   <script>
 ${bundleScript}
 
-    // Set document content
-    window.addEventListener('DOMContentLoaded', () => {
+    // Set document content with resilient immediate + lifecycle listener
+    function initMdui() {
       const view = document.getElementById('app-view');
-      if (view) {
+      if (view && !view.content) {
         view.content = ${JSON.stringify(rawContent)};
       }
-    });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initMdui);
+    } else {
+      initMdui();
+    }
   </script>
 </body>
 </html>`;
