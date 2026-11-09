@@ -171,7 +171,7 @@ Never wrap your whole response in \`\`\`mdui code fences. Use standard Markdown 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     if (name === 'render_mdui') {
-        let rawContent = String(args?.content || '').trim();
+        let rawContent = String(args?.content || args?.markdown || '').trim();
         const title = String(args?.title || 'A-MarkdownUI Component');
         const theme = String(args?.theme || 'dark');
         const targetDir = args?.targetDir ? String(args.targetDir) : '';
