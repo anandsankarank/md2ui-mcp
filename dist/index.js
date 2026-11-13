@@ -216,61 +216,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 ${bundleHead}
   <style>
-    /* Antigravity Generative UI Card Container */
-    body {
+    /* Antigravity Generative UI - Flush Layout with Auto-Height */
+    html, body {
       background: transparent;
       color: var(--foreground, #f8fafc);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       margin: 0;
-      padding: 8px;
-      overflow-x: hidden;
-      overflow-y: auto;
+      padding: 0;
+      overflow: hidden;
       box-sizing: border-box;
+      width: 100%;
     }
     .antigravity-card {
-      background: var(--card, rgba(15, 23, 42, 0.95));
-      border: 1px solid var(--border, rgba(99, 102, 241, 0.25));
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35);
+      background: transparent;
+      margin: 0;
+      padding: 0;
       box-sizing: border-box;
-    }
-    .widget-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-    }
-    .widget-title {
-      font-weight: 700;
-      font-size: 13.5px;
-      color: var(--foreground, #f8fafc);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .widget-badge {
-      font-size: 10.5px;
-      font-family: monospace;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      padding: 2px 8px;
-      border-radius: 9999px;
+      width: 100%;
     }
   </style>
 </head>
 <body class="bg-transparent text-[var(--foreground)] antialiased">
   <div class="antigravity-card">
-    <div class="widget-header">
-      <div class="widget-title">
-        <span>✦</span> ${escapeHtml(title)}
-      </div>
-      <span class="widget-badge">A-MDUI (${bundle.mode})</span>
-    </div>
-
     <a-mdui theme="${theme}" id="app-view"></a-mdui>
   </div>
 
@@ -329,6 +296,23 @@ ${bundleScript}
             }, '*');
           }
         });
+
+        // Dynamic auto-resize to fit container without internal scrollbars
+        function notifyHeight() {
+          const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 100);
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'resize', height: h }, '*');
+            window.parent.postMessage({ type: 'antigravity:resize', height: h }, '*');
+          }
+        }
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => notifyHeight());
+          ro.observe(document.body);
+          ro.observe(view);
+        }
+        window.addEventListener('load', notifyHeight);
+        setTimeout(notifyHeight, 100);
+        setTimeout(notifyHeight, 500);
       }
     }
     if (document.readyState === 'loading') {
