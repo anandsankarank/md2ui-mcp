@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, ErrorCode, McpError, } from '@modelcontextprotocol/sdk/types.js';
-import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -411,82 +409,9 @@ ${bundleScript}
 function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-const activeSseTransports = new Map();
-async function startSseServer(port) {
-    const httpServer = http.createServer(async (req, res) => {
-        // Enable CORS for web and client tool integrations
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        if (req.method === 'OPTIONS') {
-            res.writeHead(204);
-            res.end();
-            return;
-        }
-        const host = req.headers.host || `localhost:${port}`;
-        const parsedUrl = new URL(req.url || '/', `http://${host}`);
-        const pathname = parsedUrl.pathname;
-        // 1. Initial SSE Connection endpoint
-        if (pathname === '/sse' && req.method === 'GET') {
-            const transport = new SSEServerTransport('/message', res);
-            activeSseTransports.set(transport.sessionId, transport);
-            transport.onclose = () => {
-                activeSseTransports.delete(transport.sessionId);
-            };
-            await server.connect(transport);
-            return;
-        }
-        // 2. Incoming JSON-RPC Message endpoint
-        if (pathname === '/message' && req.method === 'POST') {
-            const sessionId = parsedUrl.searchParams.get('sessionId');
-            if (!sessionId || !activeSseTransports.has(sessionId)) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Missing or unknown sessionId' }));
-                return;
-            }
-            const transport = activeSseTransports.get(sessionId);
-            await transport.handlePostMessage(req, res);
-            return;
-        }
-        // 3. Health & Discovery check
-        if (pathname === '/' || pathname === '/health') {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                status: 'ok',
-                service: 'amdui-mcp-server',
-                version: '1.0.0',
-                mode: 'sse',
-                activeSessions: activeSseTransports.size,
-            }));
-            return;
-        }
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not found' }));
-    });
-    return new Promise((resolve, reject) => {
-        httpServer.listen(port, () => {
-            console.error(`[amdui-mcp-server] SSE Server running on http://localhost:${port}`);
-            console.error(`[amdui-mcp-server] SSE Endpoint: http://localhost:${port}/sse`);
-            console.error(`[amdui-mcp-server] Message Endpoint: http://localhost:${port}/message`);
-            resolve();
-        });
-        httpServer.on('error', reject);
-    });
-}
 async function main() {
-    const args = process.argv.slice(2);
-    const isSse = args.includes('--sse') || process.env.MCP_TRANSPORT === 'sse';
-    const portArgIndex = args.indexOf('--port');
-    const port = portArgIndex !== -1
-        ? parseInt(args[portArgIndex + 1], 10)
-        : parseInt(process.env.PORT || '3000', 10);
-    if (isSse) {
-        await startSseServer(port);
-    }
-    else {
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
-    }
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
 }
 main().catch((err) => {
     console.error('Fatal MCP Server Error:', err);
