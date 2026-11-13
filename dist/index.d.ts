@@ -6,9 +6,3 @@ export interface BundleSource {
     jsUrl?: string;
     cssUrl?: string;
 }
-export interface FormSubmission {
-    id: string;
-    formId: string;
-    values: Record<string, any>;
-    timestamp: string;
-}
