@@ -216,7 +216,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'render_mdui') {
     let rawContent = String(args?.content || args?.markdown || '').trim();
     const title = String(args?.title || 'A-MarkdownUI Component');
-    const theme = String(args?.theme || 'dark');
+    const ALLOWED_THEMES = ['dark', 'default', 'fintech', 'sunset', 'nordic', 'amethyst', 'light'];
+    const rawTheme = String(args?.theme || 'dark').toLowerCase().trim();
+    const safeTheme = ALLOWED_THEMES.includes(rawTheme) ? rawTheme : 'dark';
     const targetDir = args?.targetDir ? String(args.targetDir) : '';
 
     // Strip outer markdown fences if present
@@ -225,11 +227,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       rawContent = fenceMatch[1].trim();
     }
 
-    // Determine artifact directory
-    let outDir = targetDir;
-    if (!outDir) {
+    // Determine artifact directory with security containment check
+    let outDir = '';
+    if (targetDir) {
+      const resolvedTarget = path.resolve(targetDir);
+      const allowedRoots = [
+        process.cwd(),
+        process.env.ANTIGRAVITY_ARTIFACT_DIR ? path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR) : null,
+        os.tmpdir()
+      ].filter(Boolean) as string[];
+
+      const isAllowed = allowedRoots.some(root => resolvedTarget === root || resolvedTarget.startsWith(root + path.sep));
+      if (!isAllowed) {
+        throw new McpError(ErrorCode.InvalidParams, `targetDir '${targetDir}' is outside permitted directory boundaries.`);
+      }
+      outDir = resolvedTarget;
+    } else {
       if (process.env.ANTIGRAVITY_ARTIFACT_DIR && fs.existsSync(process.env.ANTIGRAVITY_ARTIFACT_DIR)) {
-        outDir = process.env.ANTIGRAVITY_ARTIFACT_DIR;
+        outDir = path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR);
       } else {
         outDir = path.join(os.tmpdir(), 'antigravity-mdui-artifacts');
       }
@@ -253,7 +268,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         : `    // Loaded dynamically via decoupled public CDN (${bundle.jsUrl})`;
 
     const htmlContent = `<!DOCTYPE html>
-<html lang="en" class="${theme}">
+<html lang="en" class="${safeTheme}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -283,7 +298,7 @@ ${bundleHead}
 </head>
 <body class="bg-transparent text-[var(--foreground)] antialiased">
   <div class="antigravity-card">
-    <a-mdui theme="${theme}" id="app-view"></a-mdui>
+    <a-mdui theme="${safeTheme}" id="app-view"></a-mdui>
   </div>
 
   <script>
@@ -324,21 +339,23 @@ ${bundleScript}
         view.addEventListener('submit', (e) => {
           showToast('✓ Form submitted locally', 'success');
           if (window.parent && window.parent !== window) {
+            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
             window.parent.postMessage({
               type: 'a-mdui:submit',
               source: 'a-mdui',
               detail: e.detail || {}
-            }, '*');
+            }, targetOrigin);
           }
         });
 
         view.addEventListener('action', (e) => {
           if (window.parent && window.parent !== window) {
+            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
             window.parent.postMessage({
               type: 'a-mdui:action',
               source: 'a-mdui',
               detail: e.detail || {}
-            }, '*');
+            }, targetOrigin);
           }
         });
 
@@ -346,8 +363,9 @@ ${bundleScript}
         function notifyHeight() {
           const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 100);
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'resize', height: h }, '*');
-            window.parent.postMessage({ type: 'antigravity:resize', height: h }, '*');
+            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
+            window.parent.postMessage({ type: 'resize', height: h }, targetOrigin);
+            window.parent.postMessage({ type: 'antigravity:resize', height: h }, targetOrigin);
           }
         }
         if (typeof ResizeObserver !== 'undefined') {
@@ -383,7 +401,7 @@ ${bundleScript}
 <agent-embed src="file://${artifactPath}"></agent-embed>
 
 * **Artifact File**: [${safeFilename}](file://${artifactPath})
-* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${theme}\` · Bundle: \`${bundle.mode}\`
+* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${safeTheme}\` · Bundle: \`${bundle.mode}\`
 * **Interaction**: Autonomous client-side UI. All reactive variables (@step, @filter), math calculations, conditions, and UI actions operate locally within the component.`,
         },
       ],
@@ -394,6 +412,11 @@ ${bundleScript}
     const content = String(args?.content || '');
     const errors: string[] = [];
     const warnings: string[] = [];
+
+    // 0. Empty input validation
+    if (content.trim().length === 0) {
+      errors.push('Document content is empty.');
+    }
 
     // 1. Container validation
     const containerOpens = (content.match(/:::\s*[a-zA-Z0-9_-]+/g) || []).length;
@@ -409,7 +432,20 @@ ${bundleScript}
       errors.push(`Input block mismatch: ${inputOpens} opened, but ${inputCloses} closed with '???'`);
     }
 
-    // 3. Grid conditional warning check
+    // 3. Expression bracket balance validation
+    const exprOpens = (content.match(/\{\{/g) || []).length;
+    const exprCloses = (content.match(/\}\}/g) || []).length;
+    if (exprOpens !== exprCloses) {
+      errors.push(`Expression interpolation mismatch: ${exprOpens} opened with '{{', but ${exprCloses} closed with '}}'.`);
+    }
+
+    // 4. Code fence block balance
+    const codeFences = (content.match(/^```/gm) || []).length;
+    if (codeFences % 2 !== 0) {
+      errors.push(`Unclosed code fence block: found odd number (${codeFences}) of \`\`\` delimiters.`);
+    }
+
+    // 5. Grid conditional warning check
     if (content.includes('::: grid') && content.includes('::: card if:')) {
       warnings.push(
         "Notice: Mutually exclusive conditional cards (e.g. '::: card if: @tab == ...') should be stacked directly without an enclosing '::: grid' to prevent column squashing."
