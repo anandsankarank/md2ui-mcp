@@ -483,11 +483,19 @@ ${bundleScript}
           return ok;
         }
 
+        // Shared selection cache across buttons to prevent mousedown blur from clearing selected text
+        let cachedSelectedText = '';
+
         const copyBtn = document.getElementById('copy-btn');
         if (copyBtn) {
+          copyBtn.addEventListener('mousedown', () => {
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : '';
+            if (text) cachedSelectedText = text;
+          });
           copyBtn.addEventListener('click', async () => {
             const sel = window.getSelection();
-            const selText = sel ? sel.toString().trim() : '';
+            const selText = (sel ? sel.toString().trim() : '') || cachedSelectedText;
             const textToCopy = selText || rawContentStr;
             const success = await copyText(textToCopy);
             if (success) {
@@ -509,7 +517,7 @@ ${bundleScript}
         // Native copy event handler (preserves scroll position and handles Cmd+C / Ctrl+C without layout shifts)
         document.addEventListener('copy', (e) => {
           const sel = window.getSelection();
-          const selText = sel ? sel.toString() : '';
+          const selText = (sel ? sel.toString() : '') || cachedSelectedText;
           if (selText && e.clipboardData) {
             e.clipboardData.setData('text/plain', selText);
             showToast('✓ Text copied to clipboard', 'success');
@@ -521,7 +529,7 @@ ${bundleScript}
         window.addEventListener('keydown', (e) => {
           if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
             const sel = window.getSelection();
-            const selText = sel ? sel.toString() : '';
+            const selText = (sel ? sel.toString() : '') || cachedSelectedText;
             if (selText) {
               e.stopPropagation();
               let copied = false;
@@ -544,11 +552,21 @@ ${bundleScript}
         // Floating quick-copy bubble for selected text
         const bubble = document.getElementById('selection-bubble');
         const bubbleCopyBtn = document.getElementById('bubble-copy-btn');
+
+        if (bubble) {
+          // CRITICAL: Prevent mousedown from blurring and clearing the DOM selection
+          bubble.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        }
+
         document.addEventListener('mouseup', (e) => {
           setTimeout(() => {
             const sel = window.getSelection();
             const text = sel ? sel.toString().trim() : '';
             if (text && bubble && !bubble.contains(e.target)) {
+              cachedSelectedText = text;
               try {
                 const range = sel.getRangeAt(0);
                 const rect = range.getBoundingClientRect();
@@ -562,19 +580,25 @@ ${bundleScript}
               }
             } else if (bubble && !bubble.contains(e.target)) {
               bubble.style.display = 'none';
+              cachedSelectedText = '';
             }
           }, 30);
         });
+
         if (bubbleCopyBtn) {
           bubbleCopyBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
             e.stopPropagation();
             const sel = window.getSelection();
-            const text = sel ? sel.toString().trim() : '';
+            const text = (sel ? sel.toString().trim() : '') || cachedSelectedText;
             if (text) {
-              await copyText(text);
-              showToast('✓ Text copied to clipboard', 'success');
+              const success = await copyText(text);
+              if (success) {
+                showToast('✓ Text copied to clipboard', 'success');
+              }
             }
             if (bubble) bubble.style.display = 'none';
+            cachedSelectedText = '';
           });
         }
       }
