@@ -285,28 +285,130 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 ${bundleHead}
   <style>
-    /* Antigravity Generative UI - Flush Layout with Auto-Height */
+    /* Antigravity Generative UI - Flush Layout with Auto-Height & Selectable Text */
     html, body {
       background: transparent;
       color: var(--foreground, #f8fafc);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       margin: 0;
       padding: 0;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: visible;
       box-sizing: border-box;
       width: 100%;
+      -webkit-user-select: text !important;
+      user-select: text !important;
     }
     .antigravity-card {
+      position: relative;
       background: transparent;
       margin: 0;
       padding: 0;
       box-sizing: border-box;
       width: 100%;
     }
+    .antigravity-card, a-mdui, .mdui-root,
+    p, span, h1, h2, h3, h4, h5, h6, table, thead, tbody, tr, td, th,
+    li, ol, ul, blockquote, div, code, pre, section, article {
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+    ::selection {
+      background: rgba(56, 189, 248, 0.35);
+      color: inherit;
+    }
+    .mdui-widget-toolbar {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      opacity: 0.75;
+      transition: opacity 0.2s ease;
+    }
+    .antigravity-card:hover .mdui-widget-toolbar {
+      opacity: 1;
+    }
+    .mdui-toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(24, 24, 27, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      line-height: 1.2;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+    .mdui-toolbar-btn:hover {
+      background: rgba(39, 39, 42, 0.95);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #38bdf8;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    .mdui-toolbar-btn.copied {
+      background: rgba(5, 150, 105, 0.85);
+      border-color: rgba(52, 211, 153, 0.7);
+      color: #ffffff;
+    }
+    .mdui-selection-bubble {
+      position: fixed;
+      z-index: 99999;
+      transform: translate(-50%, -100%);
+      margin-top: -8px;
+      background: #18181b;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .mdui-selection-bubble button {
+      background: transparent;
+      border: none;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 4px;
+    }
+    .mdui-selection-bubble button:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
   </style>
 </head>
 <body class="bg-transparent text-[var(--foreground)] antialiased">
   <div class="antigravity-card">
+    <div class="mdui-widget-toolbar" id="mdui-toolbar">
+      <button type="button" id="copy-btn" class="mdui-toolbar-btn" title="Copy content or selection to clipboard" aria-label="Copy content">
+        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span class="btn-text">Copy</span>
+      </button>
+    </div>
+    <div id="selection-bubble" class="mdui-selection-bubble" style="display:none;">
+      <button type="button" id="bubble-copy-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        Copy Selection
+      </button>
+    </div>
     <a-mdui theme="${safeTheme}" id="app-view"></a-mdui>
   </div>
 
@@ -385,6 +487,115 @@ ${bundleScript}
         window.addEventListener('load', notifyHeight);
         setTimeout(notifyHeight, 100);
         setTimeout(notifyHeight, 500);
+
+        // Clipboard copying helper with fallback
+        const rawContentStr = ${JSON.stringify(rawContent)};
+        async function copyText(text) {
+          if (!text) return false;
+          if (navigator.clipboard && window.isSecureContext) {
+            try {
+              await navigator.clipboard.writeText(text);
+              return true;
+            } catch (_) {}
+          }
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.style.top = '-9999px';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          let ok = false;
+          try {
+            ok = document.execCommand('copy');
+          } catch (_) {}
+          document.body.removeChild(ta);
+          return ok;
+        }
+
+        const copyBtn = document.getElementById('copy-btn');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async () => {
+            const sel = window.getSelection();
+            const selText = sel ? sel.toString().trim() : '';
+            const textToCopy = selText || rawContentStr;
+            const success = await copyText(textToCopy);
+            if (success) {
+              const btnText = copyBtn.querySelector('.btn-text');
+              const orig = btnText ? btnText.textContent : 'Copy';
+              copyBtn.classList.add('copied');
+              if (btnText) btnText.textContent = selText ? 'Selection Copied!' : 'Copied!';
+              showToast(selText ? '✓ Selection copied to clipboard' : '✓ Full content copied to clipboard', 'success');
+              setTimeout(() => {
+                copyBtn.classList.remove('copied');
+                if (btnText) btnText.textContent = orig;
+              }, 2000);
+            } else {
+              showToast('Failed to copy to clipboard', 'info');
+            }
+          });
+        }
+
+        // Native shortcut (Cmd+C / Ctrl+C) support
+        window.addEventListener('keydown', async (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+            const sel = window.getSelection();
+            const selText = sel ? sel.toString() : '';
+            if (selText) {
+              await copyText(selText);
+              showToast('✓ Text copied to clipboard', 'success');
+            }
+          }
+        });
+
+        // Intercept native copy event to ensure clean plain-text transfer
+        document.addEventListener('copy', (e) => {
+          const sel = window.getSelection();
+          const selText = sel ? sel.toString() : '';
+          if (selText && e.clipboardData) {
+            e.clipboardData.setData('text/plain', selText);
+            showToast('✓ Text copied to clipboard', 'success');
+          }
+        });
+
+        // Floating quick-copy bubble for selected text
+        const bubble = document.getElementById('selection-bubble');
+        const bubbleCopyBtn = document.getElementById('bubble-copy-btn');
+        document.addEventListener('mouseup', (e) => {
+          setTimeout(() => {
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : '';
+            if (text && bubble && !bubble.contains(e.target)) {
+              try {
+                const range = sel.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                  bubble.style.top = Math.max(10, rect.top) + 'px';
+                  bubble.style.left = Math.min(window.innerWidth - 70, Math.max(60, rect.left + rect.width / 2)) + 'px';
+                  bubble.style.display = 'block';
+                }
+              } catch (_) {
+                if (bubble) bubble.style.display = 'none';
+              }
+            } else if (bubble && !bubble.contains(e.target)) {
+              bubble.style.display = 'none';
+            }
+          }, 30);
+        });
+        if (bubbleCopyBtn) {
+          bubbleCopyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : '';
+            if (text) {
+              await copyText(text);
+              showToast('✓ Text copied to clipboard', 'success');
+            }
+            if (bubble) bubble.style.display = 'none';
+          });
+        }
       }
     }
     if (document.readyState === 'loading') {
