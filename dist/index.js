@@ -442,7 +442,7 @@ ${bundleScript}
         setTimeout(notifyHeight, 100);
         setTimeout(notifyHeight, 500);
 
-        // Clipboard copying helper with fallback
+        // Clipboard copying helper with scroll-neutral fallback
         const rawContentStr = ${JSON.stringify(rawContent)};
         async function copyText(text) {
           if (!text) return false;
@@ -452,20 +452,34 @@ ${bundleScript}
               return true;
             } catch (_) {}
           }
+          // Prevent screen scroll jump by anchoring fallback element to current viewport coordinates
+          const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+          const scrollX = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
           const ta = document.createElement('textarea');
           ta.value = text;
+          ta.setAttribute('readonly', '');
           ta.style.position = 'fixed';
-          ta.style.left = '-9999px';
-          ta.style.top = '-9999px';
-          ta.style.opacity = '0';
+          ta.style.top = scrollY + "px";
+          ta.style.left = scrollX + "px";
+          ta.style.width = '1px';
+          ta.style.height = '1px';
+          ta.style.padding = '0';
+          ta.style.border = 'none';
+          ta.style.outline = 'none';
+          ta.style.background = 'transparent';
+          ta.style.opacity = '0.01';
+          ta.style.pointerEvents = 'none';
           document.body.appendChild(ta);
-          ta.focus();
+          ta.focus({ preventScroll: true });
           ta.select();
           let ok = false;
           try {
             ok = document.execCommand('copy');
           } catch (_) {}
           document.body.removeChild(ta);
+          if (window.scrollY !== scrollY || window.scrollX !== scrollX) {
+            window.scrollTo(scrollX, scrollY);
+          }
           return ok;
         }
 
@@ -492,24 +506,13 @@ ${bundleScript}
           });
         }
 
-        // Native shortcut (Cmd+C / Ctrl+C) support
-        window.addEventListener('keydown', async (e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
-            const sel = window.getSelection();
-            const selText = sel ? sel.toString() : '';
-            if (selText) {
-              await copyText(selText);
-              showToast('✓ Text copied to clipboard', 'success');
-            }
-          }
-        });
-
-        // Intercept native copy event to ensure clean plain-text transfer
+        // Native copy event handler (preserves scroll position and handles Cmd+C / Ctrl+C without layout shifts)
         document.addEventListener('copy', (e) => {
           const sel = window.getSelection();
           const selText = sel ? sel.toString() : '';
           if (selText && e.clipboardData) {
             e.clipboardData.setData('text/plain', selText);
+            e.preventDefault();
             showToast('✓ Text copied to clipboard', 'success');
           }
         });
