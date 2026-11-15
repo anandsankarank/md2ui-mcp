@@ -229,11 +229,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Determine artifact directory with security containment check
     let outDir = '';
+    const conversationArtifactDir =
+      process.env.ANTIGRAVITY_APP_DATA_DIR && process.env.ANTIGRAVITY_CONVERSATION_ID
+        ? path.join(process.env.ANTIGRAVITY_APP_DATA_DIR, 'brain', process.env.ANTIGRAVITY_CONVERSATION_ID)
+        : null;
+
     if (targetDir) {
       const resolvedTarget = path.resolve(targetDir);
       const allowedRoots = [
         process.cwd(),
         process.env.ANTIGRAVITY_ARTIFACT_DIR ? path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR) : null,
+        conversationArtifactDir,
+        path.join(os.homedir(), '.gemini/antigravity'),
         os.tmpdir()
       ].filter(Boolean) as string[];
 
@@ -245,6 +252,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } else {
       if (process.env.ANTIGRAVITY_ARTIFACT_DIR && fs.existsSync(process.env.ANTIGRAVITY_ARTIFACT_DIR)) {
         outDir = path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR);
+      } else if (conversationArtifactDir) {
+        outDir = conversationArtifactDir;
       } else {
         outDir = path.join(os.tmpdir(), 'antigravity-mdui-artifacts');
       }
@@ -273,6 +282,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 ${bundleHead}
   <style>
     /* Antigravity Generative UI - Flush Layout with Auto-Height */
@@ -401,7 +411,10 @@ ${bundleScript}
 
 * **Artifact File**: [${safeFilename}](file://${artifactPath})
 * **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${safeTheme}\` · Bundle: \`${bundle.mode}\`
-* **Interaction**: Autonomous client-side UI. All reactive variables (@step, @filter), math calculations, conditions, and UI actions operate locally within the component.`,
+* **Interaction**: Autonomous client-side UI. All reactive variables (@step, @filter), math calculations, conditions, and UI actions operate locally within the component.
+
+> **CRITICAL FOR AGENT:** You MUST include the following line directly in your visible assistant message response so the user sees the rendered component:
+> <agent-embed src="file://${artifactPath}"></agent-embed>`,
         },
       ],
     };
