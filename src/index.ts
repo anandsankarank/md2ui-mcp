@@ -41,10 +41,10 @@ function resolveBundle(): BundleSource {
 
   if (!forceCdn) {
     const possibleRoots = [
+      path.resolve(__dirname, './assets'),
+      path.resolve(__dirname, '../dist/assets'),
       path.resolve(__dirname, '../../dist'),
       path.resolve(__dirname, '../../../dist'),
-      path.resolve(__dirname, '../dist/assets'),
-      path.resolve(__dirname, './assets'),
       path.resolve(process.cwd(), 'dist'),
     ];
 
@@ -273,7 +273,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 ${bundleHead}
   <style>
     /* Antigravity Generative UI - Flush Layout with Auto-Height */

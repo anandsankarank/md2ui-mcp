@@ -8,7 +8,8 @@
     "amdui-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('dist/assets',{recursive:true});if(fs.existsSync('../../dist/a-mdui.bundle.js')){fs.copyFileSync('../../dist/a-mdui.bundle.js','dist/assets/a-mdui.bundle.js');fs.copyFileSync('../../dist/a-mdui.bundle.css','dist/assets/a-mdui.bundle.css');}\"",
+    "test": "tsx --test test/*.test.ts",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts"
   },
