@@ -492,7 +492,7 @@ ${bundleScript}
         const rawContentStr = ${JSON.stringify(rawContent)};
         async function copyText(text) {
           if (!text) return false;
-          if (navigator.clipboard && window.isSecureContext) {
+          if (navigator.clipboard) {
             try {
               await navigator.clipboard.writeText(text);
               return true;
@@ -558,10 +558,34 @@ ${bundleScript}
           const selText = sel ? sel.toString() : '';
           if (selText && e.clipboardData) {
             e.clipboardData.setData('text/plain', selText);
-            e.preventDefault();
             showToast('✓ Text copied to clipboard', 'success');
           }
         });
+
+        // Capture-phase keyboard shortcut interceptor for Cmd+C (macOS) and Ctrl+C (Windows/Linux)
+        // Stops Electron/VSCode parent IDE from swallowing shortcut while copying active DOM selection in-place
+        window.addEventListener('keydown', (e) => {
+          if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+            const sel = window.getSelection();
+            const selText = sel ? sel.toString() : '';
+            if (selText) {
+              e.stopPropagation();
+              let copied = false;
+              try {
+                copied = document.execCommand('copy');
+              } catch (_) {}
+              if (!copied && navigator.clipboard) {
+                navigator.clipboard.writeText(selText).then(() => {
+                  showToast('✓ Text copied to clipboard', 'success');
+                }).catch(() => {});
+                return;
+              }
+              if (copied) {
+                showToast('✓ Text copied to clipboard', 'success');
+              }
+            }
+          }
+        }, true);
 
         // Floating quick-copy bubble for selected text
         const bubble = document.getElementById('selection-bubble');
