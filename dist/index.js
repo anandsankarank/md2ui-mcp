@@ -341,6 +341,15 @@ ${bundleHead}
     .mdui-selection-bubble button:hover {
       background: rgba(56, 189, 248, 0.15);
     }
+    a-mdui, a-mdui * {
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+    .mdui-widget-toolbar, .mdui-widget-toolbar *,
+    .mdui-selection-bubble, .mdui-selection-bubble * {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+    }
   </style>
 </head>
 <body class="bg-transparent text-[var(--foreground)] antialiased">
@@ -483,27 +492,53 @@ ${bundleScript}
           return ok;
         }
 
+        // Helper to extract clean rendered text from the component or markup
+        function getRenderedText() {
+          if (view && typeof view.innerText === 'string' && view.innerText.trim().length > 0) {
+            return view.innerText.trim();
+          }
+          return stripMduiMarkup(rawContentStr);
+        }
+
+        function stripMduiMarkup(str) {
+          if (!str) return '';
+          return str
+            .replace(/^@\w+\([^)]*\)\s*$/gm, '')
+            .replace(/^:::\s*[\w\s-]*$/gm, '')
+            .replace(/^:::\s*$/gm, '')
+            .replace(/^\?\?\?[\s\S]*?\?\?\?$/gm, '')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        }
+
         // Shared selection cache across buttons to prevent mousedown blur from clearing selected text
         let cachedSelectedText = '';
 
         const copyBtn = document.getElementById('copy-btn');
         if (copyBtn) {
-          copyBtn.addEventListener('mousedown', () => {
+          copyBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
             const sel = window.getSelection();
             const text = sel ? sel.toString().trim() : '';
             if (text) cachedSelectedText = text;
           });
-          copyBtn.addEventListener('click', async () => {
+          copyBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
             const sel = window.getSelection();
             const selText = (sel ? sel.toString().trim() : '') || cachedSelectedText;
-            const textToCopy = selText || rawContentStr;
+            const isSelection = !!selText;
+            const textToCopy = isSelection ? selText : getRenderedText();
             const success = await copyText(textToCopy);
             if (success) {
               const btnText = copyBtn.querySelector('.btn-text');
               const orig = btnText ? btnText.textContent : 'Copy';
               copyBtn.classList.add('copied');
-              if (btnText) btnText.textContent = selText ? 'Selection Copied!' : 'Copied!';
-              showToast(selText ? '✓ Selection copied to clipboard' : '✓ Full content copied to clipboard', 'success');
+              if (btnText) btnText.textContent = isSelection ? 'Selection Copied!' : 'Text Copied!';
+              showToast(isSelection ? '✓ Selection copied to clipboard' : '✓ Content text copied to clipboard', 'success');
               setTimeout(() => {
                 copyBtn.classList.remove('copied');
                 if (btnText) btnText.textContent = orig;
@@ -562,10 +597,13 @@ ${bundleScript}
         }
 
         document.addEventListener('mouseup', (e) => {
+          if (copyBtn && (copyBtn === e.target || copyBtn.contains(e.target))) return;
+          if (bubble && (bubble === e.target || bubble.contains(e.target))) return;
+
           setTimeout(() => {
             const sel = window.getSelection();
             const text = sel ? sel.toString().trim() : '';
-            if (text && bubble && !bubble.contains(e.target)) {
+            if (text && bubble) {
               cachedSelectedText = text;
               try {
                 const range = sel.getRangeAt(0);
@@ -578,7 +616,7 @@ ${bundleScript}
               } catch (_) {
                 if (bubble) bubble.style.display = 'none';
               }
-            } else if (bubble && !bubble.contains(e.target)) {
+            } else if (bubble) {
               bubble.style.display = 'none';
               cachedSelectedText = '';
             }
