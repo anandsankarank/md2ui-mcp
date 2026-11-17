@@ -282,7 +282,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
 ${bundleHead}
   <style>
     /* Antigravity Generative UI - Flush Layout with Auto-Height & Selectable Text */
@@ -292,12 +291,17 @@ ${bundleHead}
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       margin: 0;
       padding: 0;
+      min-height: 150px;
       overflow-x: hidden;
       overflow-y: visible;
       box-sizing: border-box;
       width: 100%;
       -webkit-user-select: text !important;
       user-select: text !important;
+    }
+    a-mdui {
+      display: block;
+      min-height: 150px;
     }
     .antigravity-card {
       position: relative;
@@ -409,7 +413,7 @@ ${bundleHead}
         Copy Selection
       </button>
     </div>
-    <a-mdui theme="${safeTheme}" id="app-view"></a-mdui>
+    <a-mdui theme="${safeTheme}" id="app-view">${escapeHtml(rawContent)}</a-mdui>
   </div>
 
   <script>
@@ -442,41 +446,49 @@ ${bundleScript}
     }
 
     // Set document content with resilient immediate + lifecycle listener
-    function initMdui() {
+    async function initMdui() {
+      if (typeof customElements !== 'undefined' && customElements.whenDefined) {
+        try {
+          await customElements.whenDefined('a-mdui');
+        } catch (_) {}
+      }
       const view = document.getElementById('app-view');
-      if (view && !view.content) {
-        view.content = ${JSON.stringify(rawContent)};
+      const raw = ${JSON.stringify(rawContent)};
+      if (view) {
+        if (!view.content || view.content !== raw) {
+          try {
+            delete view.content;
+          } catch (_) {}
+          view.content = raw;
+        }
 
         view.addEventListener('submit', (e) => {
           showToast('✓ Form submitted locally', 'success');
           if (window.parent && window.parent !== window) {
-            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
             window.parent.postMessage({
               type: 'a-mdui:submit',
               source: 'a-mdui',
               detail: e.detail || {}
-            }, targetOrigin);
+            }, '*');
           }
         });
 
         view.addEventListener('action', (e) => {
           if (window.parent && window.parent !== window) {
-            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
             window.parent.postMessage({
               type: 'a-mdui:action',
               source: 'a-mdui',
               detail: e.detail || {}
-            }, targetOrigin);
+            }, '*');
           }
         });
 
         // Dynamic auto-resize to fit container without internal scrollbars
         function notifyHeight() {
-          const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 100);
+          const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 180);
           if (window.parent && window.parent !== window) {
-            const targetOrigin = (window.location.origin && window.location.origin !== 'null') ? window.location.origin : '*';
-            window.parent.postMessage({ type: 'resize', height: h }, targetOrigin);
-            window.parent.postMessage({ type: 'antigravity:resize', height: h }, targetOrigin);
+            window.parent.postMessage({ type: 'resize', height: h }, '*');
+            window.parent.postMessage({ type: 'antigravity:resize', height: h }, '*');
           }
         }
         if (typeof ResizeObserver !== 'undefined') {
@@ -485,7 +497,9 @@ ${bundleScript}
           ro.observe(view);
         }
         window.addEventListener('load', notifyHeight);
-        setTimeout(notifyHeight, 100);
+        notifyHeight();
+        setTimeout(notifyHeight, 50);
+        setTimeout(notifyHeight, 150);
         setTimeout(notifyHeight, 500);
 
         // Clipboard copying helper with scroll-neutral fallback
