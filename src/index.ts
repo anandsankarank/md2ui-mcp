@@ -707,15 +707,15 @@ ${bundleScript}
     }
 
     // 1. Container validation
-    const containerOpens = (content.match(/:::\s*[a-zA-Z0-9_-]+/g) || []).length;
-    const containerCloses = (content.match(/^:::\s*$/gm) || []).length;
+    const containerOpens = (content.match(/^[ \t]*:::[ \t]+[a-zA-Z0-9_-]+/gm) || []).length;
+    const containerCloses = (content.match(/^[ \t]*:::[ \t]*$/gm) || []).length;
     if (containerOpens !== containerCloses) {
       errors.push(`Container block mismatch: ${containerOpens} opened, but ${containerCloses} closed.`);
     }
 
     // 2. Input validation
-    const inputOpens = (content.match(/\?\?\?\s+[a-zA-Z0-9_]+/g) || []).length;
-    const inputCloses = (content.match(/^\?\?\?\s*$/gm) || []).length;
+    const inputOpens = (content.match(/^[ \t]*\?\?\?[ \t]+[a-zA-Z0-9_]+/gm) || []).length;
+    const inputCloses = (content.match(/^[ \t]*\?\?\?[ \t]*$/gm) || []).length;
     if (inputOpens !== inputCloses) {
       errors.push(`Input block mismatch: ${inputOpens} opened, but ${inputCloses} closed with '???'`);
     }
