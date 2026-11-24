@@ -119,6 +119,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description:
                 'Optional directory path where the HTML artifact should be saved (e.g. Antigravity conversation artifact directory). Defaults to a persistent temporary folder.',
             },
+            includeMarkdown: {
+              type: 'boolean',
+              description:
+                'Whether to include the raw markdown code block in the tool response. Defaults to false (only the interactive component is returned).',
+              default: false,
+            },
           },
           required: ['content'],
         },
@@ -677,6 +683,14 @@ ${bundleScript}
     const lines = rawContent.split('\n').length;
     const bytes = Buffer.byteLength(rawContent, 'utf-8');
 
+    const includeMarkdown =
+      args?.includeMarkdown === true ||
+      process.env.AMDUI_INCLUDE_MARKDOWN === 'true';
+
+    const markdownSection = includeMarkdown
+      ? `\n#### Component Structure:\n\`\`\`mdui\n${rawContent}\n\`\`\`\n`
+      : '';
+
     return {
       content: [
         {
@@ -687,16 +701,12 @@ ${bundleScript}
 
 * **Interactive Component (Open in Browser)**: [Open ${safeFilename}](file://${artifactPath})
 * **Terminal Launch**: \`open "${artifactPath}"\`
-* **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`
+* **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`${markdownSection}
 
-#### Component Structure:
-\`\`\`mdui
-${rawContent}
-\`\`\`
-
-> **Note for AI Assistant:**
-> - If running inside **Antigravity IDE**: Include \`<agent-embed src="file://${artifactPath}"></agent-embed>\` in your visible response to embed the interactive widget inline in chat.
-> - If running inside **Gemini Desktop**, **Claude**, or standard Markdown chat: Present the content preview and provide the clickable link \`[Open Interactive Component](file://${artifactPath})\` so the user can interact with the live controls in their default browser.`,
+> **CRITICAL FOR AI ASSISTANT:**
+> - In Antigravity IDE: You MUST include \`<agent-embed src="file://${artifactPath}"></agent-embed>\` in your visible response.
+> - In Gemini Desktop: Present a concise 1-2 sentence overview and the link \`[Open Interactive Component](file://${artifactPath})\`.
+> - Do NOT dump redundant raw markdown code blocks when presenting the interactive component.`,
         },
       ],
     };
