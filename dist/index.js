@@ -14900,11 +14900,11 @@ ${bundleHead}
   <style>
     /* Antigravity Generative UI - Flush Layout with Auto-Height & Selectable Text */
     html, body {
-      background: transparent;
-      color: var(--foreground, #f8fafc);
+      background: var(--mdui-color-background, #0f172a);
+      color: var(--mdui-color-text, #f8fafc);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       margin: 0;
-      padding: 0;
+      padding: 16px;
       min-height: 150px;
       overflow-x: hidden;
       overflow-y: visible;
@@ -15292,16 +15292,22 @@ ${bundleScript}
       content: [
         {
           type: "text",
-          text: `### A-MDUI Interactive UI Rendered
+          text: `### A-MDUI Interactive UI Component Rendered
 
 <agent-embed src="file://${artifactPath}"></agent-embed>
 
-* **Artifact File**: [${safeFilename}](file://${artifactPath})
-* **Size**: ${lines} lines \xB7 ${bytes} bytes \xB7 Theme: \`${safeTheme}\` \xB7 Bundle: \`${bundle.mode}\`
-* **Interaction**: Autonomous client-side UI. All reactive variables (@step, @filter), math calculations, conditions, and UI actions operate locally within the component.
+* **Interactive Component (Open in Browser)**: [Open ${safeFilename}](file://${artifactPath})
+* **Terminal Launch**: \`open "${artifactPath}"\`
+* **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`
 
-> **CRITICAL FOR AGENT:** You MUST include the following line directly in your visible assistant message response so the user sees the rendered component:
-> <agent-embed src="file://${artifactPath}"></agent-embed>`
+#### Component Structure:
+\`\`\`mdui
+${rawContent}
+\`\`\`
+
+> **Note for AI Assistant:**
+> - If running inside **Antigravity IDE**: Include \`<agent-embed src="file://${artifactPath}"></agent-embed>\` in your visible response to embed the interactive widget inline in chat.
+> - If running inside **Gemini Desktop**, **Claude**, or standard Markdown chat: Present the content preview and provide the clickable link \`[Open Interactive Component](file://${artifactPath})\` so the user can interact with the live controls in their default browser.`
         }
       ]
     };

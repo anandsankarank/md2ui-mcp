@@ -681,16 +681,22 @@ ${bundleScript}
       content: [
         {
           type: 'text',
-          text: `### A-MDUI Interactive UI Rendered
+          text: `### A-MDUI Interactive UI Component Rendered
 
 <agent-embed src="file://${artifactPath}"></agent-embed>
 
-* **Artifact File**: [${safeFilename}](file://${artifactPath})
-* **Size**: ${lines} lines · ${bytes} bytes · Theme: \`${safeTheme}\` · Bundle: \`${bundle.mode}\`
-* **Interaction**: Autonomous client-side UI. All reactive variables (@step, @filter), math calculations, conditions, and UI actions operate locally within the component.
+* **Interactive Component (Open in Browser)**: [Open ${safeFilename}](file://${artifactPath})
+* **Terminal Launch**: \`open "${artifactPath}"\`
+* **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`
 
-> **CRITICAL FOR AGENT:** You MUST include the following line directly in your visible assistant message response so the user sees the rendered component:
-> <agent-embed src="file://${artifactPath}"></agent-embed>`,
+#### Component Structure:
+\`\`\`mdui
+${rawContent}
+\`\`\`
+
+> **Note for AI Assistant:**
+> - If running inside **Antigravity IDE**: Include \`<agent-embed src="file://${artifactPath}"></agent-embed>\` in your visible response to embed the interactive widget inline in chat.
+> - If running inside **Gemini Desktop**, **Claude**, or standard Markdown chat: Present the content preview and provide the clickable link \`[Open Interactive Component](file://${artifactPath})\` so the user can interact with the live controls in their default browser.`,
         },
       ],
     };
