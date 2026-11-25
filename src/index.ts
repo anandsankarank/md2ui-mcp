@@ -76,6 +76,123 @@ function resolveBundle(): BundleSource {
   };
 }
 
+
+// =============================================================================
+// Live Streaming SSE Bridge Server
+// =============================================================================
+let ssePort = 4388;
+const sseClients: http.ServerResponse[] = [];
+const activeStreamBuffers: Map<string, string> = new Map();
+
+export function broadcastStreamChunk(chunk: string, streamId?: string) {
+  const payload = JSON.stringify({ type: "chunk", chunk, streamId });
+  const data = `data: ${payload}\n\n`;
+  sseClients.forEach((res) => {
+    try { res.write(data); } catch (_) {}
+  });
+  if (ssePort !== 4388) {
+    try {
+      const req = http.request({
+        hostname: "localhost",
+        port: 4388,
+        path: "/api/stream",
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      }, () => {});
+      req.on("error", () => {});
+      req.write(payload);
+      req.end();
+    } catch (_) {}
+  }
+}
+
+export function broadcastStreamEnd(streamId?: string) {
+  const payload = JSON.stringify({ type: "end", streamId });
+  const data = `data: ${payload}\n\n`;
+  sseClients.forEach((res) => {
+    try { res.write(data); } catch (_) {}
+  });
+  if (ssePort !== 4388) {
+    try {
+      const req = http.request({
+        hostname: "localhost",
+        port: 4388,
+        path: "/api/stream",
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      }, () => {});
+      req.on("error", () => {});
+      req.write(payload);
+      req.end();
+    } catch (_) {}
+  }
+}
+
+function startSseServer(portToTry = 4388) {
+  const srv = http.createServer((req, res) => {
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
+    };
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, corsHeaders);
+      return res.end();
+    }
+    const url = new URL(req.url || "/", `http://localhost:${portToTry}`);
+    if (url.pathname === "/api/stream" && req.method === "GET") {
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        ...corsHeaders
+      });
+      res.write(": connected\n\n");
+      sseClients.push(res);
+      req.on("close", () => {
+        const idx = sseClients.indexOf(res);
+        if (idx !== -1) sseClients.splice(idx, 1);
+      });
+      return;
+    }
+    if (url.pathname === "/api/stream" && req.method === "POST") {
+      let body = "";
+      req.on("data", (d) => { body += d; });
+      req.on("end", () => {
+        try {
+          const payload = JSON.parse(body || "{}");
+          const dataStr = `data: ${JSON.stringify(payload)}\n\n`;
+          sseClients.forEach((c) => {
+            try { c.write(dataStr); } catch (_) {}
+          });
+          res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ ok: true, subscribers: sseClients.length }));
+        } catch (e: any) {
+          res.writeHead(400, corsHeaders);
+          res.end(JSON.stringify({ error: e?.message }));
+        }
+      });
+      return;
+    }
+    res.writeHead(404, corsHeaders);
+    res.end("Not Found");
+  });
+
+  srv.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE" && portToTry === 4388) {
+      startSseServer(4389);
+    }
+  });
+
+  srv.listen(portToTry, "127.0.0.1", () => {
+    ssePort = portToTry;
+  });
+}
+
+try {
+  startSseServer(4388);
+} catch (_) {}
+
 const server = new Server(
   {
     name: 'amdui-mcp-server',
@@ -130,6 +247,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['content'],
+        },
+      },
+      {
+        name: 'stream_mdui',
+        description:
+          'Drives progressive live streaming into Antigravity IDE chat or side-pane. Use action="init" to mount an instantaneous live streaming harness (<agent-embed>), action="chunk" to progressively stream token chunks in real time, and action="end" to finalize and seal the component.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['init', 'chunk', 'end'],
+              description: 'Streaming lifecycle phase: "init" creates live mount, "chunk" broadcasts tokens, "end" finalizes.',
+            },
+            streamId: {
+              type: 'string',
+              description: 'Unique stream identifier. Defaults to timestamp.',
+            },
+            chunk: {
+              type: 'string',
+              description: 'The markdown token chunk to append (required when action="chunk").',
+            },
+            initialContent: {
+              type: 'string',
+              description: 'Optional initial markdown content when initializing stream.',
+            },
+            title: {
+              type: 'string',
+              description: 'Optional display title for the streaming widget.',
+              default: 'Live A-MDUI Stream',
+            },
+            theme: {
+              type: 'string',
+              enum: ['dark', 'default', 'fintech', 'sunset', 'nordic', 'amethyst', 'light'],
+              description: 'Color theme preset for the streaming widget.',
+              default: 'dark',
+            },
+          },
+          required: ['action'],
         },
       },
       {
@@ -696,6 +852,216 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 > - Present your response EXCLUSIVELY through the interactive component.
 > - In Antigravity IDE: Output ONLY the \`<agent-embed src="file://${widgetHtmlPath}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
 > - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](file://${widgetHtmlPath})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`,
+        },
+      ],
+    };
+  }
+
+  if (name === 'stream_mdui') {
+    const action = String(args?.action || 'init').toLowerCase().trim();
+    const streamId = String(args?.streamId || `stream_${Date.now()}`);
+    const chunk = String(args?.chunk || '');
+    const initialContent = String(args?.initialContent || '');
+    const title = String(args?.title || 'Live A-MDUI Stream');
+    const ALLOWED_THEMES = ['dark', 'default', 'fintech', 'sunset', 'nordic', 'amethyst', 'light'];
+    const rawTheme = String(args?.theme || 'dark').toLowerCase().trim();
+    const safeTheme = ALLOWED_THEMES.includes(rawTheme) ? rawTheme : 'dark';
+
+    if (action === 'chunk') {
+      const existing = activeStreamBuffers.get(streamId) || '';
+      activeStreamBuffers.set(streamId, existing + chunk);
+      broadcastStreamChunk(chunk, streamId);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✓ Delivered stream chunk for session \`${streamId}\` (${chunk.length} bytes)`,
+          },
+        ],
+      };
+    }
+
+    if (action === 'end') {
+      broadcastStreamEnd(streamId);
+      const finalContent = activeStreamBuffers.get(streamId) || '';
+      activeStreamBuffers.delete(streamId);
+
+      let outDir = path.join(os.tmpdir(), 'antigravity-mdui-artifacts');
+      if (process.env.ANTIGRAVITY_ARTIFACT_DIR && fs.existsSync(process.env.ANTIGRAVITY_ARTIFACT_DIR)) {
+        outDir = path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR);
+      }
+      fs.mkdirSync(outDir, { recursive: true });
+
+      const mduiFilename = `component_${streamId}.mdui`;
+      const mduiArtifactPath = path.join(outDir, mduiFilename);
+      fs.writeFileSync(mduiArtifactPath, finalContent, 'utf-8');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✓ Stream session \`${streamId}\` finalized and saved to [${mduiFilename}](file://${mduiArtifactPath}).`,
+          },
+        ],
+      };
+    }
+
+    // action === 'init'
+    activeStreamBuffers.set(streamId, initialContent);
+    let outDir = path.join(os.tmpdir(), 'antigravity-mdui-artifacts');
+    if (process.env.ANTIGRAVITY_ARTIFACT_DIR && fs.existsSync(process.env.ANTIGRAVITY_ARTIFACT_DIR)) {
+      outDir = path.resolve(process.env.ANTIGRAVITY_ARTIFACT_DIR);
+    }
+    fs.mkdirSync(outDir, { recursive: true });
+
+    const widgetHtmlFilename = `stream_widget_${streamId}.html`;
+    const widgetHtmlPath = path.join(outDir, widgetHtmlFilename);
+
+    let themePath = path.join(__dirname, 'theme.css');
+    const userThemeCss = fs.existsSync(themePath) ? fs.readFileSync(themePath, 'utf-8') : '';
+
+    const bundle = resolveBundle();
+    const bundleCss = bundle.mode === 'inline' ? (bundle.css || '') : `@import url("${bundle.cssUrl}");`;
+    const bundleJs = bundle.mode === 'inline' ? (bundle.js || '') : '';
+
+    const streamHtml = `<!DOCTYPE html>
+<html lang="en" class="${safeTheme}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    ${bundleCss}
+    ${userThemeCss}
+    html, body {
+      background: var(--mdui-color-background, #0f172a);
+      color: var(--mdui-color-text, #f8fafc);
+      font-family: var(--mdui-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+      margin: 0;
+      padding: 14px;
+      min-height: 120px;
+      overflow-x: hidden;
+      overflow-y: visible;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    a-mdui { display: block; min-height: 120px; }
+    .stream-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 4px;
+      padding: 2px 8px;
+      margin-bottom: 8px;
+    }
+    .stream-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #38bdf8;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+  </style>
+  <script>
+    window.__AMDUI_SSE_PORT__ = ${ssePort};
+    ${bundleJs}
+  </script>
+</head>
+<body class="bg-transparent antialiased">
+  <div class="stream-indicator" id="stream-indicator">
+    <span class="stream-dot"></span>
+    <span id="stream-text">Live Streaming Session Active</span>
+  </div>
+  <a-mdui theme="${safeTheme}" id="app-view">${escapeHtml(initialContent)}</a-mdui>
+  <script>
+    (function() {
+      const view = document.getElementById("app-view");
+      const indicator = document.getElementById("stream-indicator");
+      const indicatorText = document.getElementById("stream-text");
+
+      function notifyHeight() {
+        const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 160);
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: "resize", height: h }, "*");
+          window.parent.postMessage({ type: "antigravity:resize", height: h }, "*");
+        }
+      }
+
+      try {
+        const sseUrl = "http://localhost:" + ${ssePort} + "/api/stream";
+        const evtSource = new EventSource(sseUrl);
+        evtSource.onmessage = function(event) {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "chunk" && typeof data.chunk === "string") {
+              if (view && typeof view.appendStreamChunk === "function") {
+                view.appendStreamChunk(data.chunk);
+              }
+              notifyHeight();
+            } else if (data.type === "end") {
+              if (view && typeof view.endStream === "function") {
+                view.endStream();
+              }
+              if (indicator) {
+                indicator.style.color = "#4ade80";
+                indicator.style.borderColor = "rgba(74, 222, 128, 0.3)";
+                indicator.style.background = "rgba(74, 222, 128, 0.1)";
+                const dot = indicator.querySelector(".stream-dot");
+                if (dot) dot.style.background = "#4ade80";
+              }
+              if (indicatorText) indicatorText.textContent = "Stream Finalized ✓";
+              notifyHeight();
+              evtSource.close();
+            }
+          } catch (_) {}
+        };
+      } catch (_) {}
+
+      window.addEventListener("message", function(e) {
+        if (!e.data || typeof e.data !== "object") return;
+        if (e.data.type === "a-mdui:stream-chunk" && typeof e.data.chunk === "string") {
+          if (view && typeof view.appendStreamChunk === "function") {
+            view.appendStreamChunk(e.data.chunk);
+          }
+          notifyHeight();
+        } else if (e.data.type === "a-mdui:stream-end") {
+          if (view && typeof view.endStream === "function") {
+            view.endStream();
+          }
+          notifyHeight();
+        }
+      });
+
+      if (typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(notifyHeight).observe(document.body);
+      }
+      window.addEventListener("load", notifyHeight);
+      setTimeout(notifyHeight, 100);
+      setInterval(notifyHeight, 400);
+    })();
+  </script>
+</body>
+</html>`;
+
+    fs.writeFileSync(widgetHtmlPath, streamHtml, 'utf-8');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `### A-MDUI Live Streaming Mount Initialized
+
+<agent-embed src="file://${widgetHtmlPath}"></agent-embed>
+
+* **Streaming Session**: \`${streamId}\`
+* **Port**: \`${ssePort}\`
+* **Interactive Mount**: [Open Live Stream](file://${widgetHtmlPath})`,
         },
       ],
     };
