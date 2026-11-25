@@ -14690,6 +14690,43 @@ Your consultation has been reserved in the clinic calendar.
 // packages/mcp/src/index.ts
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
+function resolveBundle() {
+  const forceCdn = process.env.AMDUI_FORCE_CDN === "true";
+  const cdnVersion = process.env.AMDUI_CDN_VERSION || "latest";
+  const cdnJsUrl = process.env.AMDUI_CDN_JS_URL || `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.js`;
+  const cdnCssUrl = process.env.AMDUI_CDN_CSS_URL || `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.css`;
+  if (!forceCdn) {
+    const possibleRoots = [
+      path.resolve(__dirname, "./assets"),
+      path.resolve(__dirname, "../dist/assets"),
+      path.resolve(__dirname, "../../dist"),
+      path.resolve(__dirname, "../../../dist"),
+      "/opt/homebrew/lib/amdui/assets",
+      path.resolve(process.cwd(), "dist"),
+      path.resolve(process.cwd(), "packages/antigravity-plugin/mcp/assets"),
+      path.resolve(process.cwd(), "packages/mcp/dist/assets")
+    ];
+    for (const root of possibleRoots) {
+      const jsPath = path.join(root, "a-mdui.bundle.js");
+      const cssPath = path.join(root, "a-mdui.bundle.css");
+      if (fs.existsSync(jsPath) && fs.existsSync(cssPath)) {
+        try {
+          const js = fs.readFileSync(jsPath, "utf-8");
+          const css = fs.readFileSync(cssPath, "utf-8");
+          if (js.length > 0 && css.length > 0) {
+            return { mode: "inline", js, css };
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  return {
+    mode: "cdn",
+    jsUrl: cdnJsUrl,
+    cssUrl: cdnCssUrl
+  };
+}
 var server = new Server(
   {
     name: "amdui-mcp-server",
@@ -14856,10 +14893,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const mduiFilename = `component_${Date.now()}.mdui`;
     const mduiArtifactPath = path.join(outDir, mduiFilename);
     fs.writeFileSync(mduiArtifactPath, rawContent, "utf-8");
-    let harnessPath = path.join(__dirname, "harness.html");
     let themePath = path.join(__dirname, "theme.css");
-    if (!fs.existsSync(harnessPath)) {
-      const candidateDirs = [
+    if (!fs.existsSync(themePath)) {
+      const candidateThemeDirs = [
         __dirname,
         path.join(__dirname, ".."),
         path.join(__dirname, "src"),
@@ -14869,16 +14905,382 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         path.join(process.cwd(), "packages/mcp/dist"),
         path.join(process.cwd(), "packages/mcp/src")
       ];
-      for (const dir of candidateDirs) {
-        const candidateHarness = path.join(dir, "harness.html");
-        if (fs.existsSync(candidateHarness)) {
-          harnessPath = candidateHarness;
-          themePath = path.join(dir, "theme.css");
+      for (const dir of candidateThemeDirs) {
+        const candidate = path.join(dir, "theme.css");
+        if (fs.existsSync(candidate)) {
+          themePath = candidate;
           break;
         }
       }
     }
-    const embedUrl = `file://${harnessPath}#theme=${safeTheme}&data=${encodeURIComponent(rawContent)}`;
+    const userThemeCss = fs.existsSync(themePath) ? fs.readFileSync(themePath, "utf-8") : "";
+    const widgetHtmlFilename = `mdui_widget_${Date.now()}.html`;
+    const widgetHtmlPath = path.join(outDir, widgetHtmlFilename);
+    const bundle = resolveBundle();
+    const bundleCss = bundle.mode === "inline" ? bundle.css || "" : `@import url("${bundle.cssUrl}");`;
+    const bundleJs = bundle.mode === "inline" ? bundle.js || "" : `// Dynamic load via CDN
+var s=document.createElement("script");s.src="${bundle.jsUrl}";document.head.appendChild(s);`;
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en" class="${safeTheme}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    /* A-MDUI Core Stylesheet */
+    ${bundleCss}
+    /* User Customizable Theme Stylesheet (${path.basename(themePath)}) */
+    ${userThemeCss}
+    /* Flush layout & Auto-Height */
+    html, body {
+      background: var(--mdui-color-background, #0f172a);
+      color: var(--mdui-color-text, #f8fafc);
+      font-family: var(--mdui-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif);
+      margin: 0;
+      padding: 14px;
+      min-height: 120px;
+      overflow-x: hidden;
+      overflow-y: visible;
+      box-sizing: border-box;
+      width: 100%;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+    a-mdui {
+      display: block;
+      min-height: 120px;
+    }
+    .antigravity-card {
+      position: relative;
+      background: transparent;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .antigravity-card, a-mdui, .mdui-root,
+    p, span, h1, h2, h3, h4, h5, h6, table, thead, tbody, tr, td, th,
+    li, ol, ul, blockquote, div, code, pre, section, article {
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+    ::selection {
+      background: rgba(56, 189, 248, 0.35);
+      color: inherit;
+    }
+    .mdui-widget-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 50;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+    .antigravity-card:hover .mdui-widget-toolbar {
+      opacity: 1;
+    }
+    .mdui-toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: var(--mdui-radius-button, 6px);
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--mdui-color-border, rgba(255, 255, 255, 0.14));
+      color: var(--mdui-color-text-muted, #94a3b8);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .mdui-toolbar-btn:hover {
+      color: var(--mdui-color-text, #f8fafc);
+      background: rgba(30, 41, 59, 0.9);
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+    .mdui-toolbar-btn.copied {
+      background: rgba(5, 150, 105, 0.85);
+      border-color: rgba(52, 211, 153, 0.7);
+      color: #ffffff;
+    }
+    .mdui-selection-bubble {
+      position: fixed;
+      z-index: 99999;
+      transform: translate(-50%, -100%);
+      margin-top: -8px;
+      background: #18181b;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .mdui-selection-bubble button {
+      background: transparent;
+      border: none;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 4px;
+    }
+    .mdui-selection-bubble button:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
+  </style>
+  <script>
+    ${bundleJs}
+  </script>
+</head>
+<body class="bg-transparent antialiased">
+  <div class="antigravity-card">
+    <div class="mdui-widget-toolbar" id="mdui-toolbar">
+      <button type="button" id="copy-btn" class="mdui-toolbar-btn" title="Copy content or selection to clipboard" aria-label="Copy content">
+        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span class="btn-text">Copy</span>
+      </button>
+    </div>
+    <div id="selection-bubble" class="mdui-selection-bubble" style="display:none;">
+      <button type="button" id="bubble-copy-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        Copy Selection
+      </button>
+    </div>
+    <a-mdui theme="${safeTheme}" id="app-view">${escapeHtml(rawContent)}</a-mdui>
+  </div>
+  <script>
+    function showToast(message, type = "success") {
+      let toast = document.getElementById("amdui-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "amdui-toast";
+        toast.style.cssText = "position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(20px);padding:8px 18px;border-radius:24px;font-size:12px;font-weight:600;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:6px;transition:all 0.3s cubic-bezier(0.16,1,0.3,1);opacity:0;pointer-events:none;";
+        document.body.appendChild(toast);
+      }
+      if (type === "success") {
+        toast.style.background = "#059669";
+        toast.style.color = "#ffffff";
+        toast.style.border = "1px solid rgba(52, 211, 153, 0.4)";
+      } else {
+        toast.style.background = "#2563eb";
+        toast.style.color = "#ffffff";
+        toast.style.border = "1px solid rgba(96, 165, 250, 0.4)";
+      }
+      toast.textContent = message;
+      toast.style.opacity = "1";
+      toast.style.transform = "translateX(-50%) translateY(0)";
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateX(-50%) translateY(20px)";
+      }, 3500);
+    }
+
+    async function initMdui() {
+      if (typeof customElements !== "undefined" && customElements.whenDefined) {
+        try { await customElements.whenDefined("a-mdui"); } catch (_) {}
+      }
+      const view = document.getElementById("app-view");
+      const raw = ${JSON.stringify(rawContent)};
+      if (view) {
+        if (!view.content || view.content !== raw) {
+          try { delete view.content; } catch (_) {}
+          view.content = raw;
+        }
+
+        view.addEventListener("submit", (e) => {
+          showToast("\u2713 Form submitted locally", "success");
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "a-mdui:submit", source: "a-mdui", detail: e.detail || {} }, "*");
+          }
+        });
+
+        view.addEventListener("action", (e) => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "a-mdui:action", source: "a-mdui", detail: e.detail || {} }, "*");
+          }
+        });
+
+        function notifyHeight() {
+          const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 160);
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "resize", height: h }, "*");
+            window.parent.postMessage({ type: "antigravity:resize", height: h }, "*");
+          }
+        }
+        if (typeof ResizeObserver !== "undefined") {
+          const ro = new ResizeObserver(() => notifyHeight());
+          ro.observe(document.body);
+          ro.observe(view);
+        }
+        window.addEventListener("load", notifyHeight);
+        notifyHeight();
+        setTimeout(notifyHeight, 60);
+        setTimeout(notifyHeight, 200);
+        setTimeout(notifyHeight, 600);
+
+        const rawContentStr = ${JSON.stringify(rawContent)};
+        async function copyText(text) {
+          if (!text) return false;
+          if (navigator.clipboard) {
+            try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+          }
+          const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+          const scrollX = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.top = scrollY + "px";
+          ta.style.left = scrollX + "px";
+          ta.style.width = "1px";
+          ta.style.height = "1px";
+          ta.style.padding = "0";
+          ta.style.border = "none";
+          ta.style.outline = "none";
+          ta.style.background = "transparent";
+          ta.style.opacity = "0.01";
+          ta.style.pointerEvents = "none";
+          document.body.appendChild(ta);
+          ta.focus({ preventScroll: true });
+          ta.select();
+          let ok = false;
+          try { ok = document.execCommand("copy"); } catch (_) {}
+          document.body.removeChild(ta);
+          if (window.scrollY !== scrollY || window.scrollX !== scrollX) {
+            window.scrollTo(scrollX, scrollY);
+          }
+          return ok;
+        }
+
+        let cachedSelectedText = "";
+        const copyBtn = document.getElementById("copy-btn");
+        if (copyBtn) {
+          copyBtn.addEventListener("mousedown", () => {
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : "";
+            if (text) cachedSelectedText = text;
+          });
+          copyBtn.addEventListener("click", async () => {
+            const sel = window.getSelection();
+            const selText = (sel ? sel.toString().trim() : "") || cachedSelectedText;
+            const textToCopy = selText || rawContentStr;
+            const success = await copyText(textToCopy);
+            if (success) {
+              const btnText = copyBtn.querySelector(".btn-text");
+              const orig = btnText ? btnText.textContent : "Copy";
+              copyBtn.classList.add("copied");
+              if (btnText) btnText.textContent = selText ? "Selection Copied!" : "Copied!";
+              showToast(selText ? "\u2713 Selection copied to clipboard" : "\u2713 Full content copied to clipboard", "success");
+              setTimeout(() => {
+                copyBtn.classList.remove("copied");
+                if (btnText) btnText.textContent = orig;
+              }, 2000);
+            } else {
+              showToast("Failed to copy to clipboard", "info");
+            }
+          });
+        }
+
+        document.addEventListener("copy", (e) => {
+          const sel = window.getSelection();
+          const selText = (sel ? sel.toString() : "") || cachedSelectedText;
+          if (selText && e.clipboardData) {
+            e.clipboardData.setData("text/plain", selText);
+            showToast("\u2713 Text copied to clipboard", "success");
+          }
+        });
+
+        window.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && (e.key === "c" || e.key === "C")) {
+            const sel = window.getSelection();
+            const selText = (sel ? sel.toString() : "") || cachedSelectedText;
+            if (selText) {
+              e.stopPropagation();
+              let copied = false;
+              try { copied = document.execCommand("copy"); } catch (_) {}
+              if (!copied && navigator.clipboard) {
+                navigator.clipboard.writeText(selText).then(() => {
+                  showToast("\u2713 Text copied to clipboard", "success");
+                }).catch(() => {});
+                return;
+              }
+              if (copied) {
+                showToast("\u2713 Text copied to clipboard", "success");
+              }
+            }
+          }
+        }, true);
+
+        const bubble = document.getElementById("selection-bubble");
+        const bubbleCopyBtn = document.getElementById("bubble-copy-btn");
+        if (bubble) {
+          bubble.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        }
+
+        document.addEventListener("mouseup", (e) => {
+          setTimeout(() => {
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : "";
+            if (text && bubble && !bubble.contains(e.target)) {
+              cachedSelectedText = text;
+              try {
+                const range = sel.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                  bubble.style.top = Math.max(10, rect.top) + "px";
+                  bubble.style.left = (rect.left + rect.width / 2) + "px";
+                  bubble.style.display = "block";
+                }
+              } catch (_) {}
+            } else if (bubble && !bubble.contains(e.target)) {
+              bubble.style.display = "none";
+            }
+          }, 10);
+        });
+
+        if (bubbleCopyBtn) {
+          bubbleCopyBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const textToCopy = cachedSelectedText || (window.getSelection() ? window.getSelection().toString().trim() : "");
+            if (textToCopy) {
+              const success = await copyText(textToCopy);
+              if (success) {
+                showToast("\u2713 Selection copied to clipboard", "success");
+                if (bubble) bubble.style.display = "none";
+              }
+            }
+          });
+        }
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initMdui);
+    } else {
+      initMdui();
+    }
+  </script>
+</body>
+</html>`;
+    fs.writeFileSync(widgetHtmlPath, htmlContent, "utf-8");
     const docLines = rawContent.split("\n").length;
     const docBytes = Buffer.byteLength(rawContent, "utf-8");
     const includeMarkdown = args?.includeMarkdown === true || process.env.AMDUI_INCLUDE_MARKDOWN === "true";
@@ -14894,17 +15296,17 @@ ${rawContent}
           type: "text",
           text: `### A-MDUI Interactive UI Component Rendered
 
-<agent-embed src="${embedUrl}"></agent-embed>
+<agent-embed src="file://${widgetHtmlPath}"></agent-embed>
 
-* **Interactive Component (Open in Browser)**: [Open A-MDUI Harness](${embedUrl})
+* **Interactive Component (Open in Browser)**: [Open in Browser](file://${widgetHtmlPath})
 * **A-MDUI Source Document**: [${mduiFilename}](file://${mduiArtifactPath})
-* **Design Theme Stylesheet**: [theme.css](file://${themePath})
+* **Customizable Stylesheet**: [theme.css](file://${themePath})
 * **Theme**: \`${safeTheme}\` \xB7 **Size**: ${docLines} lines (${docBytes} bytes)${markdownSection}
 
 > **CRITICAL FOR AI ASSISTANT:**
 > - Present your response EXCLUSIVELY through the interactive component.
-> - In Antigravity IDE: Output ONLY the \`<agent-embed src="${embedUrl}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
-> - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](${embedUrl})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`
+> - In Antigravity IDE: Output ONLY the \`<agent-embed src="file://${widgetHtmlPath}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
+> - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](file://${widgetHtmlPath})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`
         }
       ]
     };
@@ -14976,6 +15378,9 @@ ${tpl.mdui}
   }
   throw new McpError(ErrorCode.MethodNotFound, `Unknown tool '${name}'`);
 });
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
