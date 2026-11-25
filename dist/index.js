@@ -6,11 +6,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -3904,7 +3900,7 @@ var require_fast_uri = __commonJS({
         throw new Error(MALFORMED_HOST_ERROR);
       }
       canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
-      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !/\P{ASCII}/u.test(resolvedHost);
+      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !new RegExp("\\P{ASCII}", "u").test(resolvedHost);
       if (resolved.error && !encodedASCIIHost) {
         throw new Error(resolved.error);
       }
@@ -7302,6 +7298,7 @@ function $constructor(name, initializer3, params) {
   Object.defineProperty(_, "name", { value: name });
   return _;
 }
+var $brand = Symbol("zod_brand");
 var $ZodAsyncError = class extends Error {
   constructor() {
     super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
@@ -9803,6 +9800,8 @@ function en_default() {
 }
 
 // packages/mcp/node_modules/zod/v4/core/registries.js
+var $output = Symbol("ZodOutput");
+var $input = Symbol("ZodInput");
 var $ZodRegistry = class {
   constructor() {
     this._map = /* @__PURE__ */ new Map();
@@ -12571,6 +12570,9 @@ function isTerminal(status) {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
+// packages/mcp/node_modules/zod-to-json-schema/dist/esm/Options.js
+var ignoreOverride = Symbol("Let zodToJsonSchema decide on which parser to use");
+
 // packages/mcp/node_modules/zod-to-json-schema/dist/esm/parsers/string.js
 var ALPHA_NUMERIC = new Set("ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvxyz0123456789");
 
@@ -14688,40 +14690,6 @@ Your consultation has been reserved in the clinic calendar.
 // packages/mcp/src/index.ts
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
-function resolveBundle() {
-  const forceCdn = process.env.AMDUI_FORCE_CDN === "true";
-  const cdnVersion = process.env.AMDUI_CDN_VERSION || "latest";
-  const cdnJsUrl = process.env.AMDUI_CDN_JS_URL || `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.js`;
-  const cdnCssUrl = process.env.AMDUI_CDN_CSS_URL || `https://cdn.jsdelivr.net/npm/@a-mdui/web@${cdnVersion}/dist/a-mdui.bundle.css`;
-  if (!forceCdn) {
-    const possibleRoots = [
-      path.resolve(__dirname, "./assets"),
-      path.resolve(__dirname, "../dist/assets"),
-      path.resolve(__dirname, "../../dist"),
-      path.resolve(__dirname, "../../../dist"),
-      path.resolve(process.cwd(), "dist")
-    ];
-    for (const root of possibleRoots) {
-      const jsPath = path.join(root, "a-mdui.bundle.js");
-      const cssPath = path.join(root, "a-mdui.bundle.css");
-      if (fs.existsSync(jsPath) && fs.existsSync(cssPath)) {
-        try {
-          const js = fs.readFileSync(jsPath, "utf-8");
-          const css = fs.readFileSync(cssPath, "utf-8");
-          if (js.length > 0 && css.length > 0) {
-            return { mode: "inline", js, css };
-          }
-        } catch {
-        }
-      }
-    }
-  }
-  return {
-    mode: "cdn",
-    jsUrl: cdnJsUrl,
-    cssUrl: cdnCssUrl
-  };
-}
 var server = new Server(
   {
     name: "amdui-mcp-server",
@@ -14885,432 +14853,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
     fs.mkdirSync(outDir, { recursive: true });
-    const safeFilename = `mdui_widget_${Date.now()}.html`;
-    const artifactPath = path.join(outDir, safeFilename);
-    const bundle = resolveBundle();
-    const bundleHead = bundle.mode === "inline" ? `  <style>
-    /* Inlined A-MDUI bundle styling */
-    ${bundle.css}
-  </style>` : `  <link rel="stylesheet" href="${bundle.cssUrl}">
-  <script src="${bundle.jsUrl}"></script>`;
-    const bundleScript = bundle.mode === "inline" ? `    // Inline A-MDUI Web Component Bundle
-    ${bundle.js}` : `    // Loaded dynamically via decoupled public CDN (${bundle.jsUrl})`;
-    const htmlContent = `<!DOCTYPE html>
-<html lang="en" class="${safeTheme}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)}</title>
-${bundleHead}
-  <style>
-    /* Antigravity Generative UI - Flush Layout with Auto-Height & Selectable Text */
-    html, body {
-      background: var(--mdui-color-background, #0f172a);
-      color: var(--mdui-color-text, #f8fafc);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      margin: 0;
-      padding: 16px;
-      min-height: 150px;
-      overflow-x: hidden;
-      overflow-y: visible;
-      box-sizing: border-box;
-      width: 100%;
-      -webkit-user-select: text !important;
-      user-select: text !important;
-    }
-    a-mdui {
-      display: block;
-      min-height: 150px;
-    }
-    .antigravity-card {
-      position: relative;
-      background: transparent;
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      width: 100%;
-    }
-    .antigravity-card, a-mdui, .mdui-root,
-    p, span, h1, h2, h3, h4, h5, h6, table, thead, tbody, tr, td, th,
-    li, ol, ul, blockquote, div, code, pre, section, article {
-      -webkit-user-select: text !important;
-      user-select: text !important;
-    }
-    ::selection {
-      background: rgba(56, 189, 248, 0.35);
-      color: inherit;
-    }
-    .mdui-widget-toolbar {
-      position: absolute;
-      top: 10px;
-      right: 12px;
-      z-index: 50;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      opacity: 0.75;
-      transition: opacity 0.2s ease;
-    }
-    .antigravity-card:hover .mdui-widget-toolbar {
-      opacity: 1;
-    }
-    .mdui-toolbar-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(24, 24, 27, 0.78);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      color: #e2e8f0;
-      border-radius: 6px;
-      padding: 4px 9px;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
-      line-height: 1.2;
-      transition: all 0.15s ease;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
-    }
-    .mdui-toolbar-btn:hover {
-      background: rgba(39, 39, 42, 0.95);
-      border-color: rgba(56, 189, 248, 0.5);
-      color: #38bdf8;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    }
-    .mdui-toolbar-btn.copied {
-      background: rgba(5, 150, 105, 0.85);
-      border-color: rgba(52, 211, 153, 0.7);
-      color: #ffffff;
-    }
-    .mdui-selection-bubble {
-      position: fixed;
-      z-index: 99999;
-      transform: translate(-50%, -100%);
-      margin-top: -8px;
-      background: #18181b;
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-      border-radius: 6px;
-      padding: 2px;
-    }
-    .mdui-selection-bubble button {
-      background: transparent;
-      border: none;
-      color: #38bdf8;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 4px 8px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      border-radius: 4px;
-    }
-    .mdui-selection-bubble button:hover {
-      background: rgba(56, 189, 248, 0.15);
-    }
-  </style>
-</head>
-<body class="bg-transparent text-[var(--foreground)] antialiased">
-  <div class="antigravity-card">
-    <div class="mdui-widget-toolbar" id="mdui-toolbar">
-      <button type="button" id="copy-btn" class="mdui-toolbar-btn" title="Copy content or selection to clipboard" aria-label="Copy content">
-        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-        <span class="btn-text">Copy</span>
-      </button>
-    </div>
-    <div id="selection-bubble" class="mdui-selection-bubble" style="display:none;">
-      <button type="button" id="bubble-copy-btn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-        Copy Selection
-      </button>
-    </div>
-    <a-mdui theme="${safeTheme}" id="app-view">${escapeHtml(rawContent)}</a-mdui>
-  </div>
-
-  <script>
-${bundleScript}
-
-    function showToast(message, type = 'success') {
-      let toast = document.getElementById('amdui-toast');
-      if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'amdui-toast';
-        toast.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(20px);padding:8px 18px;border-radius:24px;font-size:12px;font-weight:600;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:6px;transition:all 0.3s cubic-bezier(0.16,1,0.3,1);opacity:0;pointer-events:none;';
-        document.body.appendChild(toast);
-      }
-      if (type === 'success') {
-        toast.style.background = '#059669';
-        toast.style.color = '#ffffff';
-        toast.style.border = '1px solid rgba(52, 211, 153, 0.4)';
-      } else {
-        toast.style.background = '#2563eb';
-        toast.style.color = '#ffffff';
-        toast.style.border = '1px solid rgba(96, 165, 250, 0.4)';
-      }
-      toast.textContent = message;
-      toast.style.opacity = '1';
-      toast.style.transform = 'translateX(-50%) translateY(0)';
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-50%) translateY(20px)';
-      }, 3500);
-    }
-
-    // Set document content with resilient immediate + lifecycle listener
-    async function initMdui() {
-      if (typeof customElements !== 'undefined' && customElements.whenDefined) {
-        try {
-          await customElements.whenDefined('a-mdui');
-        } catch (_) {}
-      }
-      const view = document.getElementById('app-view');
-      const raw = ${JSON.stringify(rawContent)};
-      if (view) {
-        if (!view.content || view.content !== raw) {
-          try {
-            delete view.content;
-          } catch (_) {}
-          view.content = raw;
-        }
-
-        view.addEventListener('submit', (e) => {
-          showToast('\u2713 Form submitted locally', 'success');
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({
-              type: 'a-mdui:submit',
-              source: 'a-mdui',
-              detail: e.detail || {}
-            }, '*');
-          }
-        });
-
-        view.addEventListener('action', (e) => {
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({
-              type: 'a-mdui:action',
-              source: 'a-mdui',
-              detail: e.detail || {}
-            }, '*');
-          }
-        });
-
-        // Dynamic auto-resize to fit container without internal scrollbars
-        function notifyHeight() {
-          const h = Math.ceil(document.documentElement.scrollHeight || document.body.scrollHeight || 180);
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'resize', height: h }, '*');
-            window.parent.postMessage({ type: 'antigravity:resize', height: h }, '*');
-          }
-        }
-        if (typeof ResizeObserver !== 'undefined') {
-          const ro = new ResizeObserver(() => notifyHeight());
-          ro.observe(document.body);
-          ro.observe(view);
-        }
-        window.addEventListener('load', notifyHeight);
-        notifyHeight();
-        setTimeout(notifyHeight, 50);
-        setTimeout(notifyHeight, 150);
-        setTimeout(notifyHeight, 500);
-
-        // Clipboard copying helper with scroll-neutral fallback
-        const rawContentStr = ${JSON.stringify(rawContent)};
-        async function copyText(text) {
-          if (!text) return false;
-          if (navigator.clipboard) {
-            try {
-              await navigator.clipboard.writeText(text);
-              return true;
-            } catch (_) {}
-          }
-          // Prevent screen scroll jump by anchoring fallback element to current viewport coordinates
-          const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-          const scrollX = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
-          const ta = document.createElement('textarea');
-          ta.value = text;
-          ta.setAttribute('readonly', '');
-          ta.style.position = 'fixed';
-          ta.style.top = scrollY + "px";
-          ta.style.left = scrollX + "px";
-          ta.style.width = '1px';
-          ta.style.height = '1px';
-          ta.style.padding = '0';
-          ta.style.border = 'none';
-          ta.style.outline = 'none';
-          ta.style.background = 'transparent';
-          ta.style.opacity = '0.01';
-          ta.style.pointerEvents = 'none';
-          document.body.appendChild(ta);
-          ta.focus({ preventScroll: true });
-          ta.select();
-          let ok = false;
-          try {
-            ok = document.execCommand('copy');
-          } catch (_) {}
-          document.body.removeChild(ta);
-          if (window.scrollY !== scrollY || window.scrollX !== scrollX) {
-            window.scrollTo(scrollX, scrollY);
-          }
-          return ok;
-        }
-
-        // Shared selection cache across buttons to prevent mousedown blur from clearing selected text
-        let cachedSelectedText = '';
-
-        const copyBtn = document.getElementById('copy-btn');
-        if (copyBtn) {
-          copyBtn.addEventListener('mousedown', () => {
-            const sel = window.getSelection();
-            const text = sel ? sel.toString().trim() : '';
-            if (text) cachedSelectedText = text;
-          });
-          copyBtn.addEventListener('click', async () => {
-            const sel = window.getSelection();
-            const selText = (sel ? sel.toString().trim() : '') || cachedSelectedText;
-            const textToCopy = selText || rawContentStr;
-            const success = await copyText(textToCopy);
-            if (success) {
-              const btnText = copyBtn.querySelector('.btn-text');
-              const orig = btnText ? btnText.textContent : 'Copy';
-              copyBtn.classList.add('copied');
-              if (btnText) btnText.textContent = selText ? 'Selection Copied!' : 'Copied!';
-              showToast(selText ? '\u2713 Selection copied to clipboard' : '\u2713 Full content copied to clipboard', 'success');
-              setTimeout(() => {
-                copyBtn.classList.remove('copied');
-                if (btnText) btnText.textContent = orig;
-              }, 2000);
-            } else {
-              showToast('Failed to copy to clipboard', 'info');
-            }
-          });
-        }
-
-        // Native copy event handler (preserves scroll position and handles Cmd+C / Ctrl+C without layout shifts)
-        document.addEventListener('copy', (e) => {
-          const sel = window.getSelection();
-          const selText = (sel ? sel.toString() : '') || cachedSelectedText;
-          if (selText && e.clipboardData) {
-            e.clipboardData.setData('text/plain', selText);
-            showToast('\u2713 Text copied to clipboard', 'success');
-          }
-        });
-
-        // Capture-phase keyboard shortcut interceptor for Cmd+C (macOS) and Ctrl+C (Windows/Linux)
-        // Stops Electron/VSCode parent IDE from swallowing shortcut while copying active DOM selection in-place
-        window.addEventListener('keydown', (e) => {
-          if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
-            const sel = window.getSelection();
-            const selText = (sel ? sel.toString() : '') || cachedSelectedText;
-            if (selText) {
-              e.stopPropagation();
-              let copied = false;
-              try {
-                copied = document.execCommand('copy');
-              } catch (_) {}
-              if (!copied && navigator.clipboard) {
-                navigator.clipboard.writeText(selText).then(() => {
-                  showToast('\u2713 Text copied to clipboard', 'success');
-                }).catch(() => {});
-                return;
-              }
-              if (copied) {
-                showToast('\u2713 Text copied to clipboard', 'success');
-              }
-            }
-          }
-        }, true);
-
-        // Floating quick-copy bubble for selected text
-        const bubble = document.getElementById('selection-bubble');
-        const bubbleCopyBtn = document.getElementById('bubble-copy-btn');
-
-        if (bubble) {
-          // CRITICAL: Prevent mousedown from blurring and clearing the DOM selection
-          bubble.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          });
-        }
-
-        document.addEventListener('mouseup', (e) => {
-          setTimeout(() => {
-            const sel = window.getSelection();
-            const text = sel ? sel.toString().trim() : '';
-            if (text && bubble && !bubble.contains(e.target)) {
-              cachedSelectedText = text;
-              try {
-                const range = sel.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                  bubble.style.top = Math.max(10, rect.top) + 'px';
-                  bubble.style.left = Math.min(window.innerWidth - 70, Math.max(60, rect.left + rect.width / 2)) + 'px';
-                  bubble.style.display = 'block';
-                }
-              } catch (_) {
-                if (bubble) bubble.style.display = 'none';
-              }
-            } else if (bubble && !bubble.contains(e.target)) {
-              bubble.style.display = 'none';
-              cachedSelectedText = '';
-            }
-          }, 30);
-        });
-
-        if (bubbleCopyBtn) {
-          bubbleCopyBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const sel = window.getSelection();
-            const text = (sel ? sel.toString().trim() : '') || cachedSelectedText;
-            if (text) {
-              const success = await copyText(text);
-              if (success) {
-                showToast('\u2713 Text copied to clipboard', 'success');
-              }
-            }
-            if (bubble) bubble.style.display = 'none';
-            cachedSelectedText = '';
-          });
+    const mduiFilename = `component_${Date.now()}.mdui`;
+    const mduiArtifactPath = path.join(outDir, mduiFilename);
+    fs.writeFileSync(mduiArtifactPath, rawContent, "utf-8");
+    let harnessPath = path.join(__dirname, "harness.html");
+    let themePath = path.join(__dirname, "theme.css");
+    if (!fs.existsSync(harnessPath)) {
+      const candidateDirs = [
+        __dirname,
+        path.join(__dirname, ".."),
+        path.join(__dirname, "src"),
+        path.join(__dirname, "dist"),
+        "/opt/homebrew/lib/amdui",
+        path.join(process.cwd(), "packages/antigravity-plugin/mcp"),
+        path.join(process.cwd(), "packages/mcp/dist"),
+        path.join(process.cwd(), "packages/mcp/src")
+      ];
+      for (const dir of candidateDirs) {
+        const candidateHarness = path.join(dir, "harness.html");
+        if (fs.existsSync(candidateHarness)) {
+          harnessPath = candidateHarness;
+          themePath = path.join(dir, "theme.css");
+          break;
         }
       }
     }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initMdui);
-    } else {
-      initMdui();
-    }
-  </script>
-</body>
-</html>`;
-    fs.writeFileSync(artifactPath, htmlContent, "utf-8");
-    const lines = rawContent.split("\n").length;
-    const bytes = Buffer.byteLength(rawContent, "utf-8");
+    const embedUrl = `file://${harnessPath}#theme=${safeTheme}&data=${encodeURIComponent(rawContent)}`;
+    const docLines = rawContent.split("\n").length;
+    const docBytes = Buffer.byteLength(rawContent, "utf-8");
     const includeMarkdown = args?.includeMarkdown === true || process.env.AMDUI_INCLUDE_MARKDOWN === "true";
-    const markdownSection = includeMarkdown ? `\n#### Component Structure:\n\`\`\`mdui\n${rawContent}\n\`\`\`\n` : "";
+    const markdownSection = includeMarkdown ? `
+#### Component Structure:
+\`\`\`mdui
+${rawContent}
+\`\`\`
+` : "";
     return {
       content: [
         {
           type: "text",
           text: `### A-MDUI Interactive UI Component Rendered
 
-<agent-embed src="file://${artifactPath}"></agent-embed>
+<agent-embed src="${embedUrl}"></agent-embed>
 
-* **Interactive Component (Open in Browser)**: [Open ${safeFilename}](file://${artifactPath})
-* **Terminal Launch**: \`open "${artifactPath}"\`
-* **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`${markdownSection}
+* **Interactive Component (Open in Browser)**: [Open A-MDUI Harness](${embedUrl})
+* **A-MDUI Source Document**: [${mduiFilename}](file://${mduiArtifactPath})
+* **Design Theme Stylesheet**: [theme.css](file://${themePath})
+* **Theme**: \`${safeTheme}\` \xB7 **Size**: ${docLines} lines (${docBytes} bytes)${markdownSection}
 
 > **CRITICAL FOR AI ASSISTANT:**
 > - Present your response EXCLUSIVELY through the interactive component.
-> - In Antigravity IDE: Output ONLY the \`<agent-embed src="file://${artifactPath}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
-> - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](file://${artifactPath})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`
+> - In Antigravity IDE: Output ONLY the \`<agent-embed src="${embedUrl}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
+> - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](${embedUrl})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`
         }
       ]
     };
@@ -15322,13 +14916,13 @@ ${bundleScript}
     if (content.trim().length === 0) {
       errors.push("Document content is empty.");
     }
-    const containerOpens = (content.match(/:::\s*[a-zA-Z0-9_-]+/g) || []).length;
-    const containerCloses = (content.match(/^:::\s*$/gm) || []).length;
+    const containerOpens = (content.match(/^[ \t]*:::[ \t]+[a-zA-Z0-9_-]+/gm) || []).length;
+    const containerCloses = (content.match(/^[ \t]*:::[ \t]*$/gm) || []).length;
     if (containerOpens !== containerCloses) {
       errors.push(`Container block mismatch: ${containerOpens} opened, but ${containerCloses} closed.`);
     }
-    const inputOpens = (content.match(/\?\?\?\s+[a-zA-Z0-9_]+/g) || []).length;
-    const inputCloses = (content.match(/^\?\?\?\s*$/gm) || []).length;
+    const inputOpens = (content.match(/^[ \t]*\?\?\?[ \t]+[a-zA-Z0-9_]+/gm) || []).length;
+    const inputCloses = (content.match(/^[ \t]*\?\?\?[ \t]*$/gm) || []).length;
     if (inputOpens !== inputCloses) {
       errors.push(`Input block mismatch: ${inputOpens} opened, but ${inputCloses} closed with '???'`);
     }
@@ -15382,9 +14976,6 @@ ${tpl.mdui}
   }
   throw new McpError(ErrorCode.MethodNotFound, `Unknown tool '${name}'`);
 });
-function escapeHtml(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

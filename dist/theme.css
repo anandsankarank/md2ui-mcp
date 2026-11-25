@@ -1,0 +1,59 @@
+/* ==========================================================================
+   A-MDUI User Customizable Theme Stylesheet
+   Modify the CSS variables below to customize your visual design preferences.
+   ========================================================================== */
+
+:root, .dark, [data-theme="dark"] {
+  /* Brand Accent Colors */
+  --mdui-color-primary: #3b82f6;
+  --mdui-color-primary-hover: #2563eb;
+  --mdui-color-primary-text: #ffffff;
+  --mdui-color-accent: #6366f1;
+
+  /* Surfaces & Backgrounds */
+  --mdui-color-background: #0f172a;
+  --mdui-color-surface: #1e293b;
+  --mdui-color-surface-subtle: #0f172a;
+  --mdui-color-border: #334155;
+  --mdui-color-card-bg: #1e293b;
+  --mdui-color-card-border: #334155;
+
+  /* Typography */
+  --mdui-color-text: #f8fafc;
+  --mdui-color-heading: #f8fafc;
+  --mdui-color-text-muted: #94a3b8;
+  --mdui-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mdui-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Geometry & Radii */
+  --mdui-radius-card: 14px;
+  --mdui-radius-button: 8px;
+  --mdui-radius-input: 8px;
+  --mdui-radius-badge: 9999px;
+
+  /* Status Colors */
+  --mdui-color-success: #10b981;
+  --mdui-color-warning: #f59e0b;
+  --mdui-color-destructive: #ef4444;
+}
+
+/* Light Theme Variables (when theme="light" is passed) */
+.light, [data-theme="light"] {
+  --mdui-color-primary: #2563eb;
+  --mdui-color-primary-hover: #1d4ed8;
+  --mdui-color-primary-text: #ffffff;
+  --mdui-color-accent: #4f46e5;
+
+  --mdui-color-background: #f8fafc;
+  --mdui-color-surface: #ffffff;
+  --mdui-color-surface-subtle: #f1f5f9;
+  --mdui-color-border: #e2e8f0;
+  --mdui-color-card-bg: #ffffff;
+  --mdui-color-card-border: #e2e8f0;
+
+  --mdui-color-text: #0f172a;
+  --mdui-color-heading: #0f172a;
+  --mdui-color-text-muted: #64748b;
+}
+
+/* Custom User CSS Rules (Add any bespoke component styling below) */
