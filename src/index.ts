@@ -704,9 +704,9 @@ ${bundleScript}
 * **Theme**: \`${safeTheme}\` · **Size**: ${lines} lines · **Bundle**: \`${bundle.mode}\`${markdownSection}
 
 > **CRITICAL FOR AI ASSISTANT:**
-> - In Antigravity IDE: You MUST include \`<agent-embed src="file://${artifactPath}"></agent-embed>\` in your visible response.
-> - In Gemini Desktop: Present a concise 1-2 sentence overview and the link \`[Open Interactive Component](file://${artifactPath})\`.
-> - Do NOT dump redundant raw markdown code blocks when presenting the interactive component.`,
+> - Present your response EXCLUSIVELY through the interactive component.
+> - In Antigravity IDE: Output ONLY the \`<agent-embed src="file://${artifactPath}"></agent-embed>\` tag. Do NOT write duplicate markdown explanations, bullet lists, or tables in chat outside the component.
+> - In Gemini Desktop: Output ONLY the clickable link \`[Open Interactive Component](file://${artifactPath})\` with at most 1 concise sentence. Never dump duplicate markdown text in chat.`,
         },
       ],
     };
